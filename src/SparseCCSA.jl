@@ -1,5 +1,7 @@
 module SparseCCSA
 
-# Write your package code here.
+    export dual_func!  
+
+    include("ccsa.jl")
 
 end
