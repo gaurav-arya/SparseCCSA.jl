@@ -5,52 +5,40 @@ struct DualData{T}
     n::Int
 
     # length n arrays (over dimensions). Do I want to use StaticArays?
-    x::Vector{T} 
-    lb::Vector{T}
-    ub::Vector{T} # do I need these? Can I keep just σ? I guess these clip at X.
-    σ::Vector{T}
-    dfdx::Vector{T} # gradient of objective
+    x::AbstractVector{T} 
+    lb::AbstractVector{T}
+    ub::AbstractVector{T} # do I need these? Can I keep just σ? I guess these clip at X.
+    σ::AbstractVector{T}
 
-    # m x n matrices. can be sparse. TODO: Can I support operator?
-    dfcdx::AbstractArray{T, 2} # gradients of constraints
+    # (m+1) x n matrix
+    dfdx_all # matrix-free Jacobian of objective + contraints
 
-    # constants
-    fval::T
-    ρ₀::T
-
-    # length m arrays (over constraints)
-    fcval::Vector{T}
-    ρc::Vector{T}
+    # length (m+1) arrays (over objective + constraints)
+    fval_all::T
+    ρ_all::T
 end
 
-mutable struct DualWork{T}
-    a::Vector{T} # length n
-    b::Vector{T} # length n
+struct DualWork{T}
+    a::AbstractVector{T} # length n
+    b::AbstractVector{T} # length n
 end
 
 # evaluates g(y) and populates grad with ∇g(y)
-function dual_func!(y::Vector{T}, grad::Vector{T}, d::DualData{T}, dw::DualWork{T}) where {T}
-    fval_all = vcat(d.fval, fcval) # TODO: use views
-    y_all = vcat(1, y)
-    ρ_all = vcat(ρ₀, ρc)
-    dfdx_all = vcat(dfdx', dfcdx) # TODO: make sure plays nicely with sparse dfcdx
+function dual_func!(y::AbstractVector{T}, grad::AbstractVector{T}, d::DualData{T}, dw::DualWork{T}) where {T}
+    y_all = vcat(1, y) # TODO: use views
 
-    grad .= 0
-
-    u = dot(ρ_all, y_all)
-    for j in 1:n
-        σ[j] == 0 && continue
-        dw.a[j] = 1/(2 * σ[j]^2) * u 
-        dw.b[j] = dot(dfdx_all[:, j], y_all)
-    end
+    # assume σ > 0 for now
+    u = dot(d.ρ_all, d.y_all)
+    @. dw.a = 1 / (2 * σ^2) * u
+    mul!(dw.b, dfdx_all', y_all)
 
     s1 = sum(dw.b[j]^2 / dw.a[j] for j in 1:n)
-    val = dot(y_all, fval_all) - x/4
+    val = dot(y_all, fval_all) - s1/4
 
     s2 = sum(dw.b[j]^2 / (dw.a[j]^2 * σ[j]^2) for j in 1:n)
-    for i in 1:m
-        grad[i] = 1/2 * dot(dw.b ./ dw.a, dfdx_all[i, :]) - ρ[i] / 8 * s2
-    end
+    @. dw.b /= 2 * dw.a
+    mul!(grad, dfdx_all, dw.b)
+    @. grad -= ρ / (8 * s2)
 
     val
 end
