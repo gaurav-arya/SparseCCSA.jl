@@ -42,3 +42,9 @@ function dual_func!(y::AbstractVector{T}, grad::AbstractVector{T}, d::DualData{T
 
     val
 end
+
+function f(i)
+    i + 1
+end
+
+export f
