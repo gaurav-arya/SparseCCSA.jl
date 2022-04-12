@@ -19,3 +19,27 @@ mutable struct CCSA_Opt
             ρ, σ)
     end
 end
+
+function inner_iteration(opt::CCSA_Opt, xᵏ::AbstractVector)
+    ∇f_xᵏ = Array{Float64,2}(undef, opt.m + 1, opt.n)
+    f_xᵏ = map(i -> opt.f[i](xₖ, @view ∇f_xᵏ[i, :]), 1:opt.m+1)
+    function approx_func(x::AbstractVector)
+        diff = x - xₖ
+        diff²_σ²_sum_2 = sum((diff ./ opt.σ) .^ 2) / 2
+        g = f_xᵏ + ∇f_xᵏ * diff + opt.ρ * diff²_σ²_sum_2
+        g
+    end
+
+    while true
+        xᵏ⁺¹ = similar(xₖ) # TODO: optimize inner_iteration dual
+        g_xᵏ⁺¹ = approx_func(xᵏ⁺¹)
+        f_xᵏ⁺¹ = map(fᵢ -> fᵢ(xᵏ⁺¹, []), opt.f)
+        conservative = g_xᵏ⁺¹ .>= f_xᵏ⁺¹
+        if all(conservative)
+            break
+        end
+        opt.ρ[.!conservative] *= 2
+    end
+
+    return xᵏ⁺¹
+end
