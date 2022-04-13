@@ -43,3 +43,28 @@ function inner_iteration(opt::CCSA_Opt, xᵏ::AbstractVector)
 
     return xᵏ⁺¹
 end
+
+function optimize(opt::CCSA_Opt, x⁰::AbstractVector)
+    xᵏ⁻¹ = copy(x⁰) # TODO
+    xᵏ = copy(x⁰)
+    while true
+        xᵏ⁺¹ = inner_iteration(opt, xᵏ)
+        opt.ρ *= 0.5
+        signᵏ = sign.(xᵏ - xᵏ⁻¹)
+        signᵏ⁺¹ = sign.(xᵏ⁺¹ - xᵏ)
+        update = signᵏ .* signᵏ⁺¹
+        map(1:opt.n) do j
+            if update[j] == 1
+                opt.σ[j] *= 2.0
+            elseif update[j] == -1
+                opt.σ[j] *= 0.5
+            end
+        end
+        xᵏ⁻¹ = xᵏ
+        xᵏ = xᵏ⁺¹
+        if norm(xᵏ - xᵏ⁻¹) < opt.xtol_rel
+            break
+        end
+    end
+    return xᵏ
+end
