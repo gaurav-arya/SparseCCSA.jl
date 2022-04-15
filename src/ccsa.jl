@@ -24,12 +24,13 @@ struct DualWork{T}
 end
 
 # evaluates g(y) and populates grad with ∇g(y)
+# TODO: decide whether to reuse CCSAOpt struct here
 function dual_func!(y::AbstractVector{T}, grad::AbstractVector{T}, d::DualData{T}, dw::DualWork{T}) where {T}
     y_all = vcat(1, y) # TODO: use views
 
     # assume σ > 0 for now
     u = dot(d.ρ_all, d.y_all)
-    @. dw.a = 1 / (2 * σ^2) * u
+    @. dw.a = 1 / (2 * σ^2) * u # TODO: handle case where snap to bounds
     mul!(dw.b, dfdx_all', y_all)
 
     s1 = sum(dw.b[j]^2 / dw.a[j] for j in 1:n)
@@ -40,11 +41,5 @@ function dual_func!(y::AbstractVector{T}, grad::AbstractVector{T}, d::DualData{T
     mul!(grad, dfdx_all, dw.b)
     @. grad -= ρ / (8 * s2)
 
-    val
+    val # return x as well
 end
-
-function f(i) # will be removed later
-    i + 1
-end
-
-export f
