@@ -1,4 +1,4 @@
-include("../src/ccsa.jl")
+include("../src/model.jl")
 
 
 n = 5
