@@ -114,3 +114,23 @@ function inner_iter(model::CCSAModel, xᵏ::AbstractVector{T}) where {T}
         model.ρᵢ[.!conservativeᵢ] *= 2
     end
 end
+
+function optimize(model::CCSAModel)
+    xᵏ = copy(model.meta.x0)
+    xᵏ⁺¹ = inner_iter(model, xᵏ)
+    Δxᵏ = xᵏ⁺¹ - xᵏ
+    signᵏ = signbit.(Δxᵏ) # used to check if x moves monotomically or oscillates
+    while any(@. abs(Δxᵏ / xᵏ) > model.xtol_rel)
+        model.ρ₀ /= 2 # geometrically decrease penality weight to
+        model.ρᵢ /= 2 # allow larger subsequent step if possible
+        xᵏ = xᵏ⁺¹
+        xᵏ⁺¹ = inner_iter(model, xᵏ)
+        Δxᵏ = xᵏ⁺¹ - xᵏ
+        signᵏ⁺¹ = signbit.(Δxᵏ)
+        monotonic = signᵏ .== signᵏ⁺¹ # avoid multiplication
+        model.σ[monotonic] *= 2 # double trust region if xⱼ moves monotomically
+        model.σ[.!monotonic] /= 2 # shrink trust region if xⱼ oscillates
+        signᵏ = signᵏ⁺¹
+    end
+    xᵏ⁺¹
+end
