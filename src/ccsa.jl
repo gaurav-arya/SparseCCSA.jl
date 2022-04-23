@@ -1,5 +1,6 @@
 # Full description of problem
 # TODO: proper generic typing
+# TODO: don't stuff everything into a single struct (do this later, not now)
 mutable struct CCSAState{T<:Real}
     # describes problem
     n::Int # number of variables
@@ -16,7 +17,6 @@ mutable struct CCSAState{T<:Real}
     gradx # (m+1) x n linear operator of gradient at x
 
     # arrays used by dual_func
-    dx::AbstractVector{T} # n
     a::AbstractVector{T} # n
     b::AbstractVector{T} # n
     dx_unclamped::AbstractVector{T} # n
@@ -27,7 +27,7 @@ end
 
 # returns (g(λ), gradient of g(λ))
 # don't worry about allocations for now
-function dual_func!(λ::AbstractVector{T}, st::CCSAState)
+function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
     λ_all = CatView(1, λ)
 
     # TODO: handle σ = 0 if necessary
