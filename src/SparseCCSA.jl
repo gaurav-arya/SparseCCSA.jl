@@ -1,7 +1,7 @@
 module SparseCCSA
 
-    using LinearAlgebra: mul!
     using CatViews
+    using LinearAlgebra
 
     export dual_func!  
 

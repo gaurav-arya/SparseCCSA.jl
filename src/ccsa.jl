@@ -1,44 +1,51 @@
-# Provides all necessary parameters to describe the approximate problem
-# (to be solved by inner iterations on the dual of this problem)
-struct DualData{T}
-    count::Int
-    n::Int
+# Full description of problem
+# TODO: proper generic typing
+mutable struct CCSAState{T<:Real}
+    # describes problem
+    n::Int # number of variables
+    m::Int # number of constraints
+    lb::AbstractVector{T} # n
+    ub::AbstractVector{T} # n
+    f_and_grad::Function # f(x) = (output, (m+1) x n linear operator)
 
-    # length n arrays (over dimensions). Do I want to use StaticArays?
-    x::AbstractVector{T} 
-    lb::AbstractVector{T}
-    ub::AbstractVector{T} # do I need these? Can I keep just σ? I guess these clip at X.
-    σ::AbstractVector{T}
+    # state needed for inner iteration
+    ρ::AbstractVector{T} # m + 1
+    σ::AbstractVector{T} # n
+    x::AbstractVector{T} # current best guess
+    fx::T # (m+1) x 1 output at x
+    gradx # (m+1) x n linear operator of gradient at x
 
-    # (m+1) x n matrix
-    dfdx_all # matrix-free Jacobian of objective + contraints
-
-    # length (m+1) arrays (over objective + constraints)
-    fval_all::T
-    ρ_all::T
+    # arrays used by dual_func
+    dx::AbstractVector{T} # n
+    a::AbstractVector{T} # n
+    b::AbstractVector{T} # n
+    dx_unclamped::AbstractVector{T} # n
+    dx_zeroed::AbstractVector{T} # n
+    dx::AbstractVector{T} # n
+    gradλ::AbstractVector{T} # m
 end
 
-struct DualWork{T}
-    a::AbstractVector{T} # length n
-    b::AbstractVector{T} # length n
-end
+# returns (g(λ), gradient of g(λ))
+# don't worry about allocations for now
+function dual_func!(λ::AbstractVector{T}, st::CCSAState)
+    λ_all = CatView(1, λ)
 
-# evaluates g(y) and populates grad with ∇g(y)
-function dual_func!(y::AbstractVector{T}, grad::AbstractVector{T}, d::DualData{T}, dw::DualWork{T}) where {T}
-    y_all = vcat(1, y) # TODO: use views
+    # TODO: handle σ = 0 if necessary
+    @. st.a = 1 / (2 * st.σ^2) * dot(st.ρ, λ_all)
+    mul!(st.b, st.gradx', λ_all)
 
-    # assume σ > 0 for now
-    u = dot(d.ρ_all, d.y_all)
-    @. dw.a = 1 / (2 * σ^2) * u
-    mul!(dw.b, dfdx_all', y_all)
+    S = zero(T)
 
-    s1 = sum(dw.b[j]^2 / dw.a[j] for j in 1:n)
-    val = dot(y_all, fval_all) - s1/4
+    for j in 1:m
+        st.dx_unclamped[j] = -b[j] / 2 * a[j]
+        st.dx[j] = clamp(dx[j], -σ[j], σ[j])
+        st.dx_zeroed[j] = abs(dx[j]) < σ ? dx[j] : zero(T)
+        S += b[j]^2 / (8 * a[j]^2 * σ[j]^2)
+    end
 
-    s2 = sum(dw.b[j]^2 / (dw.a[j]^2 * σ[j]^2) for j in 1:n)
-    @. dw.b /= 2 * dw.a
-    mul!(grad, dfdx_all, dw.b)
-    @. grad -= ρ / (8 * s2)
+    gλ = dot(λ, fx) + sum(a[j] * dx[j] + b[j] * dx[j]^2 for j in 1:n)
+    mul!(gradλ, st.gradx, st.dx_zeroed)
+    @. gradλ += ρ * S
 
-    val
+    gλ, gradλ
 end
