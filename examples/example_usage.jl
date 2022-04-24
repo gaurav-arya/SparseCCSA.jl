@@ -14,23 +14,24 @@ end
 
 st = CCSAState(
           2,
-          2,
+          3,
           [0,0],
           [100,100],
           f_and_grad,
           # the stuff below shouldn't matter
           # later we will ensure that the user does not have to create these, but don't worry about it for now.
-          [1,1], 
-          [1,1],
-          [0,0],
-          [0,0],
-          [0,0],
-          [0,0],
-          [0,0].
-          [0,0],
-          [0,0],
-          [0,0],
-          [0,0]
+          ones(m+1) 
+          ones(n),
+          zeros(n),
+          zeros(m+1),
+          zeros(m+1,n),
+
+          zeros(n),
+          zeros(n),
+          zeros(n),
+          zeros(n),
+          zeros(n),
+          zeros(m+1)
          )
 
 optimize(st) # get answer

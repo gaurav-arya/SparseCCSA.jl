@@ -35,16 +35,16 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
     mul!(st.b, st.gradx', λ_all)
 
     S = zero(T)
-    for j in 1:m
+    for j in 1:st.n
         st.dx_unclamped[j] = -st.b[j] / 2 * st.a[j]
         st.dx[j] = clamp(st.dx_unclamped[j], -st.σ[j], st.σ[j])
         st.dx_zeroed[j] = abs(st.dx_unclamped[j]) < σ ? st.dx_unclamped[j] : zero(T)
         S += b[j]^2 / (8 * a[j]^2 * σ[j]^2)
     end
 
-    gλ = dot(λ_all, st.fx) + sum(st.a[j] * st.dx[j] + st.b[j] * st.dx[j]^2 for j in 1:n)
+    gλ = dot(λ_all, st.fx) + sum(st.a[j] * st.dx[j] + st.b[j] * st.dx[j]^2 for j in 1:st.n)
     mul!(st.gradλ, st.gradx, st.dx_zeroed)
     @. st.gradλ += ρ * S
 
-    gλ, st.gradλ
+    gλ, @view st.gradλ[2:end]
 end
