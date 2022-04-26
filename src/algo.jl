@@ -1,59 +1,56 @@
-using LinearAlgebra
-
-mutable struct CCSAOpt
-    n::Int # number of variables
-    m::Int # number of constraints
-    lower_bounds::AbstractVector{Float64} # n
-    upper_bounds::AbstractVector{Float64} # n
-    xtol_rel::Float64
-    f::Function # f(x) = output
-    fgrad::Function # fgrad(x) = (m+1) x n linear operator
-    ρ::AbstractVector{Float64} # m + 1
-    σ::AbstractVector{Float64} # n
+function optimize_simple(opt::CCSAState)
+    while norm(opt.Δx) > opt.xtol_rel
+        while opt.gλ < opt.f_and_∇f(opt.x+opt.Δx)[1][1]
+            dual_func!(Float64[], opt)
+            opt.ρ[1] *= 2
+        end
+        opt.ρ .*= 0.5
+        update = (opt.x[1]#=ᵏ=# - opt.xᵏ⁻¹[1])*(opt.Δx[1]) 
+        if update > 0
+            opt.σ[1] *= 2.0
+        elseif update < 0
+            opt.σ[1] *= 0.5
+        end
+        opt.xᵏ⁻¹ .= opt.x
+        opt.x .= opt.x .+ opt.Δx
+        println("Suppose here is a callback")
+    end
+    nothing
 end
-
-function inner_iterations(opt::CCSAOpt, xᵏ::AbstractVector)
-    ∇f_xᵏ = Array{Float64,2}(undef, opt.m + 1, opt.n)
-    f_xᵏ = map(i -> opt.f[i](xₖ, @view ∇f_xᵏ[i, :]), 1:opt.m+1) # TODO: adjust
-
+function inner_iterations(opt::CCSAState)
+    ρ_again=[1.0]
+    σ_again=copy(opt.σ)
     while true
-        # Recursively call optimize with a new opt object
-        # optimize g(y) using dual_func! 
-        # once we find the best y, how do we find x^(k+1)?
-        xᵏ⁺¹ = similar(xₖ) # TODO: optimize inner_iteration dual
-        g_xᵏ⁺¹ = approx_func(xᵏ⁺¹)
-        f_xᵏ⁺¹ = map(fᵢ -> fᵢ(xᵏ⁺¹, []), opt.f)
-        conservative = g_xᵏ⁺¹ .>= f_xᵏ⁺¹
+        opt_again=CCSAState(opt.n,0,λ->dual_func!(λ,opt),ρ_again,σ_again,zeros(opt.n),zeros(opt.n))
+        
+        optimize_simple(opt_again) 
+        # NOW, FIND X(λ=opt_again.x) #
+        # ALREADY IN opt.Δx IS IT ? #
+        gxˡ⁺¹= Array{Float64}(undef,opt.m+1)
+        mul!(gxˡ⁺¹,f_grad,opt.Δx)
+        gxˡ⁺¹ .+= 0.5 .* (opt.ρ).^2 .* sum(abs2,(opt.Δx)./(opt.σ))
+        conservative = ( gxˡ⁺¹ .>= opt.fx )
         if all(conservative)
             break
         end
         opt.ρ[.!conservative] *= 2
     end
-
-    return xᵏ⁺¹
 end
-
-function optimize(opt::CCSAOpt, x⁰::AbstractVector)
-    xᵏ⁻¹ = copy(x⁰) # TODO
-    xᵏ = copy(x⁰)
-    while true
-        xᵏ⁺¹ = inner_iterations(opt, xᵏ)
-        opt.ρ *= 0.5
-        signᵏ = sign.(xᵏ - xᵏ⁻¹)
-        signᵏ⁺¹ = sign.(xᵏ⁺¹ - xᵏ)
-        update = signᵏ .* signᵏ⁺¹
-        map(1:opt.n) do j
-            if update[j] == 1
-                opt.σ[j] *= 2.0
-            elseif update[j] == -1
-                opt.σ[j] *= 0.5
-            end
-        end
-        xᵏ⁻¹ = xᵏ
-        xᵏ = xᵏ⁺¹
-        if norm(xᵏ - xᵏ⁻¹) < opt.xtol_rel
-            break
-        end
+function optimize(opt::CCSAState)
+    if opt.m==0
+        optimize_simple(opt)
     end
-    return xᵏ
+    while norm(opt.Δx) > opt.xtol_rel
+        inner_iterations(opt)
+        opt.ρ .*= 0.5
+        update = (opt.x[1]#=ᵏ=# - opt.xᵏ⁻¹[1])*(opt.Δx[1]) 
+        if update > 0
+            opt.σ[1] *= 2.0
+        elseif update < 0
+            opt.σ[1] *= 0.5
+        end
+        opt.xᵏ⁻¹ .= opt.x
+        opt.x .= opt.x .+ opt.Δx
+        println("Suppose here is a callback")
+    end
 end
