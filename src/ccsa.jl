@@ -25,6 +25,7 @@ mutable struct CCSAState{T<:Real}
     gradλ::AbstractVector{T} # m
 end
 
+<<<<<<< HEAD
 # returns (g(λ), gradient of g(λ))
 # don't worry about allocations for now
 function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
@@ -33,6 +34,17 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
     # TODO: handle σ = 0 if necessary
     @. st.a = 1 / (2 * st.σ^2) * dot(st.ρ, λ_all)
     mul!(st.b, st.gradx', λ_all)
+=======
+# evaluates g(y) and populates grad with ∇g(y)
+# TODO: decide whether to reuse CCSAOpt struct here
+function dual_func!(y::AbstractVector{T}, grad::AbstractVector{T}, d::DualData{T}, dw::DualWork{T}) where {T}
+    y_all = vcat(1, y) # TODO: use views
+
+    # assume σ > 0 for now
+    u = dot(d.ρ_all, d.y_all)
+    @. dw.a = 1 / (2 * σ^2) * u # TODO: handle case where snap to bounds
+    mul!(dw.b, dfdx_all', y_all)
+>>>>>>> implementation2
 
     S = zero(T)
     for j in 1:st.n
@@ -46,5 +58,9 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
     mul!(st.gradλ, st.gradx, st.dx_zeroed)
     @. st.gradλ += ρ * S
 
+<<<<<<< HEAD
     gλ, @view st.gradλ[2:end]
+=======
+    val # return x as well
+>>>>>>> implementation2
 end

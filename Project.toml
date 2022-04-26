@@ -3,7 +3,12 @@ uuid = "d89c45e2-5082-4989-aa21-3a0137f6b149"
 authors = ["Gaurav Arya <gauravarya272@gmail.com> and contributors"]
 version = "0.1.0"
 
+[deps]
+CatViews = "81a5f4ea-a946-549a-aa7e-2a7f63a27d31"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
 [compat]
+CatViews = "1"
 julia = "1"
 
 [extras]
