@@ -8,6 +8,8 @@ mutable struct CCSAState{T<:Real}
     σ::AbstractVector{T} # n
     x::AbstractVector{T} # current best guess
     xtol_rel::Float64
+    # Above are essential
+    # Below are temp
     fx::AbstractVector{T} # (m+1) x 1 output at x
     ∇fx # (m+1) x n linear operator of gradient at x
     a::AbstractVector{T} # n
@@ -16,15 +18,14 @@ mutable struct CCSAState{T<:Real}
     Δx::AbstractVector{T} # n
     gλ::T
     ∇gλ::AbstractVector{T} # m
-    xᵏ⁻¹::AbstractVector{T}
+    x⁻¹::AbstractVector{T}
     function CCSAState(n,m,f_and_fgrad,ρ,σ,x)
-        return new{Float64}(n,m,ones(n)*(-2^20),zeros(n)*(2^20),f_and_fgrad,ρ,σ,x,1e-5,zeros(m+1),zeros(m+1,n),zeros(n),zeros(n),zeros(n),ones(n),0,zeros(m),zeros(n))
+        return new{Float64}(n,m,ones(n)*(-2^20),ones(n)*(2^20),f_and_fgrad,ρ,σ,x,1e-5,zeros(m+1),zeros(m+1,n),zeros(n),zeros(n),zeros(n),ones(n),0,zeros(m),zeros(n))
     end
     function CCSAState(n,m,f_and_fgrad,ρ,σ,x,lb)
         return new{Float64}(n,m,lb,zeros(n)*(2^20),f_and_fgrad,ρ,σ,x,1e-5,zeros(m+1),zeros(m+1,n),zeros(n),zeros(n),zeros(n),ones(n),0,zeros(m),zeros(n))
     end
 end
-
 function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
     st.fx,st.∇fx=st.f_and_∇f(st.x)
     λ_all = CatView([1.0],λ)
@@ -37,6 +38,8 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
     TMP=Vector{T}(undef,m+1)
     mul!(TMP, st.∇fx, st.Δx)
     st.∇gλ = TMP[2:m+1]
-    st.∇gλ .+= st.ρ.*sum((st.Δx).^2 ./ (2 .* (st.σ).^2))
+    st.∇gλ .+= (@view st.ρ[2:m+1]).*sum((st.Δx).^2 ./ (2 .* (st.σ).^2))
     return [st.gλ,st.∇gλ]
+    # What are used in this?
+    # st.f_and_∇f, st.x, λ, st.σ, st.ρ, 
 end

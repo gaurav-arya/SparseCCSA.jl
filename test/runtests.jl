@@ -4,15 +4,20 @@ using Test
 @testset "SparseCCSA.jl" begin
     # Write your tests here.
     function f(x)
-        return sum(abs2,x)
+        return [sum(abs2,x)]
     end
-    function fgrad(x) #(m+1)*n
-        return [2x[1];]
+    function ∇f(x) #(m+1)*n
+        return 2*x
     end
-    n=1
+    function f_and_∇f(x)
+        return f(x),∇f(x)
+    end
+    n=3
     m=0
-    ρ0=[100.0,100.0]
-    σ0=[10.0]
-    x0=[50.0]
-    CCSAState(n,m,f_fgrad,ρ0,σ0,x0)
+    ρ0=[10.0] #m+1
+    σ0=10.0*ones(n) #n
+    x0=50.0*ones(n) #n
+    st=CCSAState(n,m,f_and_∇f,ρ0,σ0,x0)
+    optimize(st)
+    @test st.x==0
 end
