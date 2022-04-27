@@ -1,3 +1,16 @@
+using LinearAlgebra
+
+mutable struct CCSAOpt{T}
+    nvar::Int, # number of variables
+    ncon::Int, # number of constraints
+    x0::AbstractVector{T}, # initial point (must be feasible)
+    lvar::AbstractVector{T}, # vector of lower bounds
+    uvar::AbstractVector{T}, # vector of upper bounds
+    xtol_rel::T, # x relative tolerence
+    ρ::T, # [ncon + 1] penality weight for obj f₀
+    σ::AbstractVector{T} # [nvar] radius of trust region
+    fᵢJ::Function
+end
 
 function inner_iter(opt::CCSAOpt, xᵏ::AbstractVector{T}) where {T}
     σ² = opt.σ .^ 2

@@ -3,7 +3,7 @@ mutable struct CCSAState{T<:Real}
     m::Int # number of constraints
     lb::AbstractVector{T} # n
     ub::AbstractVector{T} # n
-    f_and_∇f::Function # f(x) = (output, (m+1) x n linear operator)
+    f_and_∇f::Function # f(x) = (m+1, (m+1) x n linear operator)
     ρ::AbstractVector{T} # m + 1
     σ::AbstractVector{T} # n
     x::AbstractVector{T} # current best guess
@@ -25,6 +25,7 @@ mutable struct CCSAState{T<:Real}
     function CCSAState(n,m,f_and_fgrad,ρ,σ,x,lb)
         return new{Float64}(n,m,lb,zeros(n)*(2^20),f_and_fgrad,ρ,σ,x,1e-5,zeros(m+1),zeros(m+1,n),zeros(n),zeros(n),zeros(n),ones(n),0,zeros(m),zeros(n))
     end
+    # TODO: Does Julia has something like "Inf" ?
 end
 function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
     st.fx,st.∇fx=st.f_and_∇f(st.x)
@@ -35,11 +36,11 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
     @. st.Δx = clamp(-st.b / 2 * st.a, -st.σ, st.σ)
     @. st.Δx = clamp(st.Δx, st.lb-st.x, st.ub-st.x)
     st.gλ = dot(λ_all, st.fx) + sum((st.a) .* (st.Δx).^2 .+ (st.b) .* (st.Δx))
-    TMP=Vector{T}(undef,m+1)
+    TMP=Vector{T}(undef,st.m+1)
     mul!(TMP, st.∇fx, st.Δx)
-    st.∇gλ = TMP[2:m+1]
-    st.∇gλ .+= (@view st.ρ[2:m+1]).*sum((st.Δx).^2 ./ (2 .* (st.σ).^2))
-    return [st.gλ,st.∇gλ]
+    st.∇gλ = TMP[2:st.m+1]
+    st.∇gλ .+= (@view st.ρ[2:st.m+1]).*sum((st.Δx).^2 ./ (2 .* (st.σ).^2))
+    return [[st.gλ],st.∇gλ[:,:]'] #[1维vector，m维vector换成矩阵]
     # What are used in this?
     # st.f_and_∇f, st.x, λ, st.σ, st.ρ, 
 end

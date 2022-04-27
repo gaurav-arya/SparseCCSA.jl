@@ -1,12 +1,20 @@
 function optimize_simple(opt::CCSAState)
     while true
-        while opt.gλ < opt.f_and_∇f(opt.x+opt.Δx)[1][1]
+        while true
+            #println("   inner: Current ρ: $(opt.ρ)")
+            println("           simple Current ρ/σ: $(opt.ρ/opt.σ)")
+            println("           simple Current g(λ): $(opt.gλ)")
+            println("           simple Current f(x+Δx): $(opt.f_and_∇f(opt.x+opt.Δx)[1][1][1])")
             dual_func!(Float64[], opt)
+            if opt.gλ >= opt.f_and_∇f(opt.x+opt.Δx)[1][1]
+                break
+            end
             opt.ρ[1] *= 2
         end
-        opt.ρ .*= 0.5
-        update =  sign.(opt.x .- opt.x⁻¹).*sign.(opt.Δx)
-        map(1:opt.n) do j
+        
+        opt.ρ[1] *= 0.5
+        update =  sign.(opt.x - opt.x⁻¹).*sign.(opt.Δx)
+        for j in 1:opt.n
             if update[j] == 1
                 opt.σ[j] *= 2.0
             elseif update[j] == -1
@@ -15,13 +23,17 @@ function optimize_simple(opt::CCSAState)
         end 
         opt.x⁻¹ .= opt.x
         opt.x .= opt.x .+ opt.Δx
+
+        #println("\nSuppose here is a callback")
+        println("       Simple Current x: $(opt.x)")
+        #println("Current σ: $(opt.σ)")
+
         if norm(opt.Δx) < opt.xtol_rel
+            println("       Simple outer loop break now")
             break
         end
-        println("Suppose here is a callback")
-        println("Current x: $(opt.x)")
     end
-    nothing
+    return nothing
 end
 function inner_iterations(opt::CCSAState)
     ρ_again=[1.0]
@@ -32,11 +44,18 @@ function inner_iterations(opt::CCSAState)
         # 现在优化完了，找到了最好的λ，怎么回去找Δx？？？
         # 在跑一次dual_func
         # 因为新建state是copy出去了这个function，不会改变原来的值？？
-        dual_func!(λ,opt)
-        gxˡ⁺¹= Array{Float64}(undef,opt.m+1)
-        mul!(gxˡ⁺¹,f_grad,opt.Δx)
-        gxˡ⁺¹ .+= 0.5 .* (opt.ρ).^2 .* sum(abs2,(opt.Δx)./(opt.σ))
-        conservative = ( gxˡ⁺¹ .>= opt.fx )
+        dual_func!(opt_again.x,opt)
+        #λ=opt_again.x
+        #没有constraint的时候，g₍ₓ₎就是g₍λ₎
+        #现在不是了，现在g₍ₓ₎是m+1维，g₍λ₎是一维
+        #计算g(x)
+        g₍ₓ₎=copy(opt.fx)
+        mul!(g₍ₓ₎,opt.∇fx,opt.Δx)
+        g₍ₓ₎ .+= 0.5 .* (opt.ρ).^2 .* sum(abs2,(opt.Δx)./(opt.σ))
+        println("   inner Current ρ/σ: $(opt.ρ/opt.σ)")
+        println("   inner Current f(x+Δx): $(opt.f_and_∇f(opt.x+opt.Δx)[1])")
+        println("   inner Current g(x): $(g₍ₓ₎)")
+        conservative = ( g₍ₓ₎ .>= opt.f_and_∇f(opt.x+opt.Δx)[1])
         if all(conservative)
             break
         end
@@ -48,13 +67,13 @@ function optimize(opt::CCSAState)
         optimize_simple(opt)
         return nothing
     end
-    dual_func!(zeros(opt.m),opt)
+    test=dual_func!(zeros(opt.m),opt)
     while true
         inner_iterations(opt)
+
         opt.ρ .*= 0.5
-        update = sign.(xᵏ .- x⁻¹) .* sign.(xᵏ⁺¹ .- xᵏ)
-        
-        map(1:opt.n) do j
+        update =  sign.(opt.x - opt.x⁻¹).*sign.(opt.Δx)
+        for j in 1:opt.n
             if update[j] == 1
                 opt.σ[j] *= 2.0
             elseif update[j] == -1
@@ -63,9 +82,11 @@ function optimize(opt::CCSAState)
         end 
         opt.x⁻¹ .= opt.x
         opt.x .= opt.x .+ opt.Δx
+
+        println("Current x: $(opt.x)")
+        #println("Current σ: $(opt.σ)")
         if norm(opt.Δx) < opt.xtol_rel
             break
         end
-        println("Suppose here is a callback")
     end
 end
