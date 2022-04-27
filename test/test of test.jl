@@ -50,3 +50,4 @@ function fundamental_no_constraints_test()
     @assert norm(st.x)<0.0001
 end
 fundamental_no_constraints_test()
+    11
