@@ -1,10 +1,8 @@
 module SparseCCSA
-
-    using LinearAlgebra: mul!
     using CatViews
-
-    export dual_func!  
-
+    using LinearAlgebra
+    export CCSAState
+    export dual_func! 
+    export optimize
     include("ccsa.jl")
-
 end
