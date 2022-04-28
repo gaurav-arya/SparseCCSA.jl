@@ -1,25 +1,42 @@
 using SparseCCSA
 using Test
-
+using LinearAlgebra
 @testset "SparseCCSA.jl" begin
     # Write your tests here.
-    function fundamental_no_constraints_test(n)
-        function f(x)
-            return [sum(abs2,x)]
-        end
-        function ∇f(x) #(m+1)*n
-            return 2*x[:,:]'
-        end
+    function test1()
         function f_and_∇f(x)
-            return f(x),∇f(x)
+            f=[sum(abs2,x),x[1]+1.0]
+            ∇f=[2x[1];1.0;;]
+            return f,∇f
         end
-        m=0
-        ρ0=[10.0] #m+1
-        σ0=10.0*ones(n) #n
-        x0=50.0*ones(n) #n
-        st=CCSAState(n,m,f_and_∇f,ρ0,σ0,x0)
+        n=1
+        m=1
+        σ=[30.0] #n
+        ρ=[2.0,0.0001]*σ[1]^2 #m+1
+        x=[-10.0]
+        lb=[-100.0]
+        ub=[100.0]
+        opt=CCSAState(n,m,f_and_∇f,ρ,σ,x,lb,ub)
+        optimize(opt)
+        return opt.x
+    end
+    function test2()
+        function f_and_grad(x)
+            fx = [x[1]^2 * x[2], x[1] - 3, x[1] + 4, x[2] - 4]
+            gradx = [2*x[1] x[1]^2; 1 0; 1 0; 0 1]
+            fx, gradx
+        end
+        n=2
+        m=3
+        ρ=[1000.,1000.,1000.,1000.] #m+1
+        σ=[100.,100.] #n
+        lb=[-100.0,-100.0]
+        ub=[100.0,100.0]
+        x=[0.0,0.0]
+        st = CCSAState(n,m,f_and_grad,ρ,σ,x,lb,ub)
         optimize(st)
         return st.x
     end
-    @test norm(fundamental_no_constraints_test(5))<0.01
+    @test norm(test1()-[-1.0 ])<0.001
+    @test norm(test2()-[-100.0, -100.0])<1.0
 end

@@ -25,6 +25,9 @@ mutable struct CCSAState{T<:Real}
     function CCSAState(n,m,f_and_fgrad,ρ,σ,x,lb)
         return new{Float64}(n,m,lb,ones(n)*(2^20),f_and_fgrad,ρ,σ,x,1e-5,zeros(m+1),zeros(m+1,n),zeros(n),zeros(n),zeros(n),ones(n),0,zeros(m+1),zeros(n))
     end
+    function CCSAState(n,m,f_and_fgrad,ρ,σ,x,lb,ub)
+        return new{Float64}(n,m,lb,ub,f_and_fgrad,ρ,σ,x,1e-5,zeros(m+1),zeros(m+1,n),zeros(n),zeros(n),zeros(n),ones(n),0,zeros(m+1),zeros(n))
+    end
     # TODO: Does Julia has something like "Inf" ?
 end
 function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
@@ -35,9 +38,6 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
     @. st.Δx = clamp(-st.b / (2 * st.a), -st.σ, st.σ)
     @. st.Δx = clamp(st.Δx, st.lb-st.x, st.ub-st.x)
     st.gλ = dot(λ_all, st.fx) + sum((st.a) .* (st.Δx).^2 .+ (st.b) .* (st.Δx))
-    #for j in 1:st.n
-    #    st.dx_zeroed[j] = abs(st.Δx[j]) < σ[j] ? st.Δx : zero(T)
-    #end
     mul!(st.∇gλ, st.∇fx, st.Δx)
     st.∇gλ .+= st.fx
     st.∇gλ .+= st.ρ.*sum((st.Δx).^2 ./ (2 .* (st.σ).^2))
@@ -86,40 +86,32 @@ function inner_iterations(opt::CCSAState)
 # i.e. max{min{g0(x)+λ1g1(x)...}}=max{g(λ)}
 # gi are constructed by opt.ρ/opt.σ
     ρ_again=[1.0]
-    σ_again=copy(opt.σ)
+    σ_again=ones(opt.m)
     while true
-        # Now it's max g(λ), so a "-" here
         max_problem(λ)= begin 
             result=dual_func!(λ,opt) 
             -result[1], -result[2]
         end
-        opt_again=CCSAState(opt.n,0,max_problem,ρ_again,σ_again,zeros(opt.n),zeros(opt.n)) 
+        opt_again=CCSAState(opt.m,0,max_problem,ρ_again,σ_again,zeros(opt.m),zeros(opt.m)) 
         optimize_simple(opt_again) 
-        # 现在优化完了，找到了最好的λ，怎么回去找Δx？？？
-        # 在跑一次dual_func
-        # 因为新建state是copy出去了这个function，不会改变原来的值？？
         dual_func!(opt_again.x,opt)
         println("   inner The optimal of dual λ: $(opt_again.x)")
         println("   inner The optimal of dual x: $(opt.x)")
         println("   inner The optimal of dual x+Δx: $(opt.x+opt.Δx)")
-        #λ=opt_again.x
-        #没有constraint的时候，g₍ₓ₎就是g₍λ₎
-        #现在不是了，现在g₍ₓ₎是m+1维，g₍λ₎是一维
-        #计算g(x)
         g₍ₓ₎=similar(opt.fx)
         mul!(g₍ₓ₎,opt.∇fx,opt.Δx)
         g₍ₓ₎.+=opt.fx
         g₍ₓ₎ .+= 0.5 .* (opt.ρ) .* sum(abs2,(opt.Δx)./(opt.σ))
         println("   inner Current f(x+Δx): $(opt.f_and_∇f(opt.x+opt.Δx)[1])")
         println("   inner Current g(x): $(g₍ₓ₎)")
-        println("       g(x)inner Current opt.fx: $(opt.fx)")
-        println("       g(x)inner Current opt.∇fx: $(opt.∇fx)")
-        println("       g(x)inner Current opt.∇fx*opt.Δx: $(opt.∇fx*opt.Δx)")
-        println("       g(x)inner Current 2-defree: $(0.5 .* (opt.ρ) .* sum(abs2,(opt.Δx)./(opt.σ)))")
+        #println("       g(x)inner Current opt.fx: $(opt.fx)")
+        #println("       g(x)inner Current opt.∇fx: $(opt.∇fx)")
+        #println("       g(x)inner Current opt.∇fx*opt.Δx: $(opt.∇fx*opt.Δx)")
+        #println("       g(x)inner Current 2-defree: $(0.5 .* (opt.ρ) .* sum(abs2,(opt.Δx)./(opt.σ)))")
         println("   inner Current ρ: $(opt.ρ)")
         println("   inner Current σ: $(opt.σ)")
-        println("####################################")
-        println("####################################")
+        println("   ####################################")
+        println("   ####################################")
         conservative = ( g₍ₓ₎ .>= opt.f_and_∇f(opt.x+opt.Δx)[1])
         if all(conservative)
             break
@@ -135,8 +127,12 @@ function optimize(opt::CCSAState)
     test=dual_func!(zeros(opt.m),opt)
     while true
         inner_iterations(opt)
-        test=dual_func!(zeros(opt.m),opt)
         update =  sign.(opt.x - opt.x⁻¹).*sign.(opt.Δx)
+
+        println("Current x: $(opt.x)")
+        println("Current x+Δx: $(opt.x+opt.Δx)")
+        println("Current update: $(update)")
+        println("Current σ: $(opt.σ)")
         for j in 1:opt.n
             if update[j] == 1
                 opt.σ[j] *= 2.0
@@ -147,7 +143,7 @@ function optimize(opt::CCSAState)
         opt.ρ .*= 0.5
         opt.x⁻¹ .= opt.x
         opt.x .= opt.x .+ opt.Δx
-        println("Current x: $(opt.x)")
+        println("Current σ after update: $(opt.σ)")
         if norm(opt.Δx) < opt.xtol_rel
             break
         end
