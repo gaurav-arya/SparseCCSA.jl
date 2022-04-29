@@ -3,9 +3,9 @@ using Test
 using LinearAlgebra
 @testset "SparseCCSA.jl" begin
     # Write your tests here.
-    function test1()
+    function test1(bound)
         function f_and_∇f(x)
-            f=[sum(abs2,x),x[1]+1.0]
+            f=[abs2(x[1]),x[1]-bound]
             ∇f=[2x[1];1.0;;]
             return f,∇f
         end
@@ -37,6 +37,7 @@ using LinearAlgebra
         optimize(st)
         return st.x
     end
-    @test norm(test1()-[-1.0 ])<0.001
-    @test norm(test2()-[-100.0, -100.0])<1.0
+    @test norm(test1(-1)-[-1.0 ])<0.001 # the constraint is tight
+    @test norm(test1(1)-[0.])<0.001 # the constraint is tight
+    @test norm(test2()-[-100.0, -100.0])<1.0 # the box constraint is tight
 end

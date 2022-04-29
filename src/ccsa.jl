@@ -30,9 +30,10 @@ mutable struct CCSAState{T<:Real}
     end
     # TODO: Does Julia has something like "Inf" ?
 end
+
+# Returns the dual function g(λ) and ∇g(λ)
 function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
-    st.fx,st.∇fx=st.f_and_∇f(st.x)
-    λ_all = CatView([1.0],λ)
+    λ_all = CatView([one(T)], λ)
     st.a .= dot(st.ρ, λ_all) ./ (2 .* (st.σ).^2)
     mul!(st.b, st.∇fx', λ_all)
     @. st.Δx = clamp(-st.b / (2 * st.a), -st.σ, st.σ)
@@ -41,12 +42,13 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
     mul!(st.∇gλ, st.∇fx, st.Δx)
     st.∇gλ .+= st.fx
     st.∇gλ .+= st.ρ.*sum((st.Δx).^2 ./ (2 .* (st.σ).^2))
-    return [st.gλ],st.∇gλ[2:st.m+1,:]' #[1维vector，m维vector换成矩阵]
+    return [st.gλ], st.∇gλ[2:st.m+1,:]' #[1维vector，m维vector换成矩阵]
     # What are used in this?
     # st.f_and_∇f, st.x, λ, st.σ, st.ρ, 
 end
 function optimize_simple(opt::CCSAState)
     while true
+        opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
         while true
             dual_func!(Float64[], opt)
             #println("           simple Current g(x): $(opt.gλ)")
@@ -88,6 +90,7 @@ function inner_iterations(opt::CCSAState)
     ρ_again=[1.0]
     σ_again=ones(opt.m)
     while true
+        opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
         max_problem(λ)= begin 
             result=dual_func!(λ,opt) 
             -result[1], -result[2]
@@ -119,6 +122,7 @@ function inner_iterations(opt::CCSAState)
         opt.ρ[.!conservative] *= 2
     end
 end
+
 function optimize(opt::CCSAState)
     if opt.m==0
         optimize_simple(opt)
