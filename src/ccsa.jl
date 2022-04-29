@@ -42,7 +42,7 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
     mul!(st.∇gλ, st.∇fx, st.Δx)
     st.∇gλ .+= st.fx
     st.∇gλ .+= st.ρ.*sum((st.Δx).^2 ./ (2 .* (st.σ).^2))
-    return [st.gλ], st.∇gλ[2:st.m+1,:]' #[1维vector，m维vector换成矩阵]
+    return [st.gλ], (@view st.∇gλ[2:st.m+1,:])' #[1维vector，m维vector换成矩阵]
     # What are used in this?
     # st.f_and_∇f, st.x, λ, st.σ, st.ρ, 
 end
