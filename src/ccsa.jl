@@ -10,7 +10,7 @@ mutable struct CCSAState{T<:AbstractFloat}
     xtol_rel::T # relative tolerence
 
     fx::AbstractVector{T} # (m+1) x 1 function values at x
-    ∇fx # (m+1) x n linear operator of Jacobian at x
+    ∇fx::AbstractMatrix{T} # (m+1) x n linear operator of Jacobian at x
     a::AbstractVector{T} # n
     b::AbstractVector{T} # n
     Δx_zeroed::AbstractVector{T} # n
@@ -18,14 +18,38 @@ mutable struct CCSAState{T<:AbstractFloat}
     gλ::T
     ∇gλ::AbstractVector{T} # m+1, the extra first dimension is for convince
     x⁻¹::AbstractVector{T}
-    function CCSAState(n, m, f_and_fgrad, ρ, σ, x)
-        return new{Float64}(n, m, ones(n) * (-2^20), ones(n) * (2^20), f_and_fgrad, ρ, σ, x, 1e-5, zeros(m + 1), zeros(m + 1, n), zeros(n), zeros(n), zeros(n), ones(n), 0, zeros(m + 1), zeros(n))
-    end
-    function CCSAState(n, m, f_and_fgrad, ρ, σ, x, lb)
-        return new{Float64}(n, m, lb, ones(n) * (2^20), f_and_fgrad, ρ, σ, x, 1e-5, zeros(m + 1), zeros(m + 1, n), zeros(n), zeros(n), zeros(n), ones(n), 0, zeros(m + 1), zeros(n))
-    end
-    function CCSAState(n, m, f_and_fgrad, ρ, σ, x, lb, ub)
-        return new{Float64}(n, m, lb, ub, f_and_fgrad, ρ, σ, x, 1e-5, zeros(m + 1), zeros(m + 1, n), zeros(n), zeros(n), zeros(n), ones(n), 0, zeros(m + 1), zeros(n))
+
+    function CCSAState(
+        n::Integer, # number of variables
+        m::Integer, # number of inequality constraints
+        f_and_∇f::Function,
+        penality_weight::AbstractVector{T}, # (m + 1) penality weight ρ
+        trust_radius::AbstractVector{T}, # n radius of trust region σ
+        x₀::AbstractVector{T}; # initial feasible point
+        lb::AbstractVector{T}=fill(typemin(T), n), # lower bounds, default -Inf
+        ub::AbstractVector{T}=fill(typemax(T), n), # upper bounds, default Inf
+        xtol_rel::T=T(1e-5) # relative tolerence
+    ) where {T<:AbstractFloat}
+        new{T}(
+            n,
+            m,
+            lb,
+            ub,
+            f_and_∇f,
+            penality_weight,
+            trust_radius,
+            x₀,
+            xtol_rel,
+            Vector{T}(undef, m + 1),
+            Matrix{T}(undef, m + 1, n),
+            Vector{T}(undef, n),
+            Vector{T}(undef, n),
+            Vector{T}(undef, n),
+            Vector{T}(undef, n),
+            T(0),
+            Vector{T}(undef, m + 1),
+            zeros(T, n)
+        )
     end
 end
 
@@ -93,7 +117,7 @@ function inner_iterations(opt::CCSAState)
             result = dual_func!(λ, opt)
             -result[1], -result[2]
         end
-        opt_again = CCSAState(opt.m, 0, max_problem, ρ_again, σ_again, zeros(opt.m), zeros(opt.m))
+        opt_again = CCSAState(opt.m, 0, max_problem, ρ_again, σ_again, zeros(opt.m), lb=zeros(opt.m))
         optimize_simple(opt_again)
         dual_func!(opt_again.x, opt)
         println("   inner The optimal of dual λ: $(opt_again.x)")
