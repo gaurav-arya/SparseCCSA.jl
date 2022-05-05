@@ -15,7 +15,7 @@ function test1()
     x=[-10.0]
     lb=[-100.0]
     ub=[100.0]
-    opt=CCSAState(n,m,f_and_∇f,ρ,σ,x,lb,ub)
+    opt=CCSAState(n,m,f_and_∇f,ρ,σ,x,lb=lb,ub=ub)
     optimize(opt)
     return opt.x
 end
@@ -33,7 +33,7 @@ function test2()
     lb=[-100.0,-100.0]
     ub=[100.0,100.0]
     x=[0.0,0.0]
-    st = CCSAState(n,m,f_and_grad,ρ,σ,x,lb,ub)
+    st = CCSAState(n,m,f_and_grad,ρ,σ,x,lb=lb,ub=ub)
     optimize(st)
     return st.x
 end
