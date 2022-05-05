@@ -54,20 +54,20 @@ mutable struct CCSAState{T<:AbstractFloat}
 end
 
 # Returns the dual function g(λ) and ∇g(λ)
-function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
+function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
     λ_all = CatView([one(T)], λ)
-    st.a .= dot(st.ρ, λ_all) ./ (2 .* (st.σ) .^ 2)
+    st.a .= dot(st.ρ, λ_all) ./ (2 .* st.σ .^ 2)
     mul!(st.b, st.∇fx', λ_all)
     @. st.Δx = clamp(-st.b / (2 * st.a), -st.σ, st.σ)
     @. st.Δx = clamp(st.Δx, st.lb - st.x, st.ub - st.x)
-    st.gλ = dot(λ_all, st.fx) + sum((st.a) .* (st.Δx) .^ 2 .+ (st.b) .* (st.Δx))
+    st.gλ = dot(λ_all, st.fx) + sum(@. st.a * st.Δx^2 + st.b * st.Δx)
     mul!(st.∇gλ, st.∇fx, st.Δx)
-    st.∇gλ .+= st.fx
-    st.∇gλ .+= st.ρ .* sum((st.Δx) .^ 2 ./ (2 .* (st.σ) .^ 2))
+    st.∇gλ += st.fx + st.ρ .* sum(@. st.Δx^2 / (2 * st.σ^2))
     return [st.gλ], (@view st.∇gλ[2:st.m+1, :])' #[1维vector，m维vector换成矩阵]
     # What are used in this?
     # st.f_and_∇f, st.x, λ, st.σ, st.ρ, 
 end
+
 function optimize_simple(opt::CCSAState)
     while true
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
@@ -103,21 +103,30 @@ function optimize_simple(opt::CCSAState)
     end
     return nothing
 end
-function inner_iterations(opt::CCSAState)
+
+function inner_iterations(opt::CCSAState{T}) where {T}
     # input: opt::CCSAState
     # output: update opt.Δx
     # opt.Δx is the solution of the dual problem
     # i.e. max{min{g0(x)+λ1g1(x)...}}=max{g(λ)}
     # gi are constructed by opt.ρ/opt.σ
-    ρ_again = [1.0]
-    σ_again = ones(opt.m)
+    ρ_again = [one(T)]
+    σ_again = ones(T, opt.m)
     while true
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
         max_problem(λ) = begin
             result = dual_func!(λ, opt)
             -result[1], -result[2]
         end
-        opt_again = CCSAState(opt.m, 0, max_problem, ρ_again, σ_again, zeros(opt.m), lb=zeros(opt.m))
+        opt_again = CCSAState( # dual problem
+            opt.m, # number of variables
+            0, # number of inequality constraints
+            max_problem, # dual function and gradient
+            ρ_again, # penality weight
+            σ_again, # radius of trust regions
+            ones(opt.m), # initial feasible point
+            lb=zeros(opt.m) # lower bound for dual problem
+        )
         optimize_simple(opt_again)
         dual_func!(opt_again.x, opt)
         println("   inner The optimal of dual λ: $(opt_again.x)")
@@ -125,8 +134,7 @@ function inner_iterations(opt::CCSAState)
         println("   inner The optimal of dual x+Δx: $(opt.x+opt.Δx)")
         g₍ₓ₎ = similar(opt.fx)
         mul!(g₍ₓ₎, opt.∇fx, opt.Δx)
-        g₍ₓ₎ .+= opt.fx
-        g₍ₓ₎ .+= 0.5 .* (opt.ρ) .* sum(abs2, (opt.Δx) ./ (opt.σ))
+        g₍ₓ₎ += opt.fx + opt.ρ * sum(abs2, opt.Δx ./ opt.σ) * 0.5
         println("   inner Current f(x+Δx): $(opt.f_and_∇f(opt.x+opt.Δx)[1])")
         println("   inner Current g(x): $(g₍ₓ₎)")
         #println("       g(x)inner Current opt.fx: $(opt.fx)")
@@ -145,12 +153,12 @@ function inner_iterations(opt::CCSAState)
     end
 end
 
-function optimize(opt::CCSAState)
+function optimize(opt::CCSAState{T}) where {T}
     if opt.m == 0
         optimize_simple(opt)
-        return nothing
+        return
     end
-    test = dual_func!(zeros(opt.m), opt)
+    # test = dual_func!(zeros(T, opt.m), opt)
     while true
         inner_iterations(opt)
         update = sign.(opt.x - opt.x⁻¹) .* sign.(opt.Δx)
@@ -166,9 +174,9 @@ function optimize(opt::CCSAState)
                 opt.σ[j] *= 0.5
             end
         end
-        opt.ρ .*= 0.5
+        opt.ρ *= 0.5
         opt.x⁻¹ .= opt.x
-        opt.x .= opt.x .+ opt.Δx
+        opt.x += opt.Δx
         println("Current σ after update: $(opt.σ)")
         if norm(opt.Δx) < opt.xtol_rel
             break
