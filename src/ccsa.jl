@@ -30,6 +30,7 @@ mutable struct CCSAState{T<:AbstractFloat}
         ub::AbstractVector{T}=fill(typemax(T), n), # upper bounds, default Inf
         xtol_rel::T=T(1e-5) # relative tolerence
     ) where {T<:AbstractFloat}
+        fx, ∇fx = f_and_∇f(x₀)
         new{T}(
             n,
             m,
@@ -40,8 +41,8 @@ mutable struct CCSAState{T<:AbstractFloat}
             trust_radius,
             x₀,
             xtol_rel,
-            Vector{T}(undef, m + 1),
-            Matrix{T}(undef, m + 1, n),
+            fx,
+            ∇fx,
             Vector{T}(undef, n),
             Vector{T}(undef, n),
             Vector{T}(undef, n),
@@ -68,11 +69,10 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
     # st.f_and_∇f, st.x, λ, st.σ, st.ρ, 
 end
 
-function optimize_simple(opt::CCSAState)
+function optimize_simple(opt::CCSAState{T}) where {T}
     while true
-        opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
         while true
-            dual_func!(Float64[], opt)
+            dual_func!(T[], opt)
             #println("           simple Current g(x): $(opt.gλ)")
             #println("           simple Current f(x+Δx): $(opt.f_and_∇f(opt.x+opt.Δx)[1][1][1])")
             if opt.gλ >= opt.f_and_∇f(opt.x + opt.Δx)[1][1]
@@ -100,6 +100,7 @@ function optimize_simple(opt::CCSAState)
             println("       Simple outer loop break now")
             break
         end
+        opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
     end
     return nothing
 end
