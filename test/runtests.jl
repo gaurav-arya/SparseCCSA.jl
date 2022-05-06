@@ -1,6 +1,7 @@
 using SparseCCSA
 using Test
 using LinearAlgebra
+using SparseArrays
 
 @testset "constructor" begin
     nvar = 30
@@ -40,6 +41,21 @@ using LinearAlgebra
     test_constructor(Float16)
     test_constructor(Float32)
     test_constructor(Float64)
+end
+
+@testset "sparse Jacobian constuctor" begin
+    nvar = 100
+    ncon = 200
+    function f_and_∇f(x)
+        sprand(Float64, ncon + 1, nvar, 0.3) * x, sprand(Float64, ncon + 1, nvar, 0.2)
+    end
+    ρ = ones(nvar + 1)
+    σ = ones(ncon)
+    x₀ = zeros(nvar)
+    sparse_opt = CCSAState(nvar, ncon, f_and_∇f, ρ, σ, x₀)
+    # Dense Jacobian should not be allocated if sparsity is provided
+    @test typeof(sparse_opt.∇fx) <: AbstractSparseMatrix
+    @test typeof(sparse_opt.∇fx) <: DenseMatrix broken = true
 end
 
 @testset "SparseCCSA.jl" begin
