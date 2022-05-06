@@ -65,29 +65,30 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
     return [st.gλ], st.∇gλ'
 end
 
-function update_trust_region!(opt::CCSAState)
-    monotonic = signbit.(opt.Δx_last) .== signbit.(opt.Δx)
+function update_trust_region_and_penalty!(opt::CCSAState)
+    opt.ρ *= 0.5 # reduce penality wight to allow larger subsequent steps if possible
+    monotonic = signbit.(opt.Δx_last) .== signbit.(opt.Δx) # signbit avoid multiplication
     opt.σ[monotonic] *= 2 # double trust region if xⱼ moves monotomically
     opt.σ[.!monotonic] *= 0.5 # shrink trust region if xⱼ oscillates
     return
 end
 
+# optimize problem with no constraint
 function optimize_simple(opt::CCSAState{T}) where {T}
     while true
         while true
             dual_func!(T[], opt)
-            if opt.gλ ≥ opt.f_and_∇f(opt.x + opt.Δx)[1][1]
+            if opt.gλ ≥ opt.f_and_∇f(opt.x + opt.Δx)[1][1] # check conservative
                 break
             end
             opt.ρ *= 2
         end
-        opt.ρ *= 0.5
-        update_trust_region!(opt)
-        opt.Δx_last .= opt.Δx
+        update_trust_region_and_penalty!(opt)
         opt.x += opt.Δx
         if norm(opt.Δx) < opt.xtol_rel
             return
         end
+        opt.Δx_last = opt.Δx
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
     end
 end
@@ -102,42 +103,31 @@ function inner_iterations(opt::CCSAState{T}) where {T}
     σ_again = ones(T, opt.m)
     while true
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
-        max_problem(λ) = begin
-            result = dual_func!(λ, opt)
-            -result[1], -result[2]
+        Lagrange_dual(λ) = begin
+            gλ, ∇gλ = dual_func!(λ, opt)
+            -gλ, -∇gλ # minus signs used to change max problem to min problem
         end
-        opt_again = CCSAState( # dual problem
-            opt.m, # number of variables
-            0, # number of inequality constraints
-            max_problem, # dual function and gradient
+        opt_again = CCSAState( # Lagrange dual problem
+            opt.m, # number of Lagrange multipliers
+            0, # no inequality constraints
+            Lagrange_dual, # negative Lagrange dual function and gradient
             ρ_again, # penality weight
-            σ_again, # radius of trust regions
-            ones(opt.m), # initial feasible point
-            lb=zeros(opt.m) # lower bound for dual problem
+            σ_again, # radii of trust regions
+            ones(T, opt.m), # initial feasible point
+            lb=zeros(T, opt.m) # nonnegative Lagrange multipliers for inequality constraints
         )
         optimize_simple(opt_again)
-        dual_func!(opt_again.x, opt)
-        println("   inner The optimal of dual λ: $(opt_again.x)")
-        println("   inner The optimal of dual x: $(opt.x)")
-        println("   inner The optimal of dual x+Δx: $(opt.x+opt.Δx)")
-        g₍ₓ₎ = similar(opt.fx)
-        mul!(g₍ₓ₎, opt.∇fx, opt.Δx)
-        g₍ₓ₎ += opt.fx + opt.ρ * sum(abs2, opt.Δx ./ opt.σ) * 0.5
-        println("   inner Current f(x+Δx): $(opt.f_and_∇f(opt.x+opt.Δx)[1])")
-        println("   inner Current g(x): $(g₍ₓ₎)")
-        #println("       g(x)inner Current opt.fx: $(opt.fx)")
-        #println("       g(x)inner Current opt.∇fx: $(opt.∇fx)")
-        #println("       g(x)inner Current opt.∇fx*opt.Δx: $(opt.∇fx*opt.Δx)")
-        #println("       g(x)inner Current 2-defree: $(0.5 .* (opt.ρ) .* sum(abs2,(opt.Δx)./(opt.σ)))")
-        println("   inner Current ρ: $(opt.ρ)")
-        println("   inner Current σ: $(opt.σ)")
-        println("   ####################################")
-        println("   ####################################")
-        conservative = (g₍ₓ₎ .>= opt.f_and_∇f(opt.x + opt.Δx)[1])
+        λ = opt_again.x # result of Lagrange dual problem
+        dual_func!(λ, opt)
+        gᵢxᵏ⁺¹ = similar(opt.fx) # TODO: avoid heap allocation
+        mul!(gᵢxᵏ⁺¹, opt.∇fx, opt.Δx)
+        gᵢxᵏ⁺¹ += opt.fx + sum(abs2, opt.Δx ./ opt.σ) * 0.5 * opt.ρ
+        fᵢxᵏ⁺¹ = opt.f_and_∇f(opt.x + opt.Δx)[1]
+        conservative = gᵢxᵏ⁺¹ .≥ fᵢxᵏ⁺¹
         if all(conservative)
-            break
+            return
         end
-        opt.ρ[.!conservative] *= 2
+        opt.ρ[.!conservative] *= 2 # increase ρ until achieving conservative approxmation
     end
 end
 
@@ -146,16 +136,13 @@ function optimize(opt::CCSAState{T}) where {T}
         optimize_simple(opt)
         return
     end
-    # test = dual_func!(zeros(T, opt.m), opt)
     while true
         inner_iterations(opt)
-        update_trust_region!(opt)
-        opt.ρ *= 0.5
-        opt.Δx_last .= opt.Δx
+        update_trust_region_and_penalty!(opt)
         opt.x += opt.Δx
-        println("Current σ after update: $(opt.σ)")
-        if norm(opt.Δx) < opt.xtol_rel
-            break
+        if norm(opt.Δx) < opt.xtol_rel # TODO: adjust stop criteria
+            return
         end
+        opt.Δx_last = opt.Δx
     end
 end
