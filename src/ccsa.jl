@@ -65,15 +65,10 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
     return [st.gλ], st.∇gλ'
 end
 
-function update_conservative!(opt::CCSAState)
-    update = sign.(opt.Δx_last) .* sign.(opt.Δx)
-    for j in 1:opt.n
-        if update[j] == 1
-            opt.σ[j] *= 2.0
-        elseif update[j] == -1
-            opt.σ[j] *= 0.5
-        end
-    end
+function update_trust_region!(opt::CCSAState)
+    monotonic = signbit.(opt.Δx_last) .== signbit.(opt.Δx)
+    opt.σ[monotonic] *= 2 # double trust region if xⱼ moves monotomically
+    opt.σ[.!monotonic] *= 0.5 # shrink trust region if xⱼ oscillates
     return
 end
 
@@ -87,7 +82,7 @@ function optimize_simple(opt::CCSAState{T}) where {T}
             opt.ρ *= 2
         end
         opt.ρ *= 0.5
-        update_conservative!(opt)
+        update_trust_region!(opt)
         opt.Δx_last .= opt.Δx
         opt.x += opt.Δx
         if norm(opt.Δx) < opt.xtol_rel
@@ -154,7 +149,7 @@ function optimize(opt::CCSAState{T}) where {T}
     # test = dual_func!(zeros(T, opt.m), opt)
     while true
         inner_iterations(opt)
-        update_conservative!(opt)
+        update_trust_region!(opt)
         opt.ρ *= 0.5
         opt.Δx_last .= opt.Δx
         opt.x += opt.Δx
