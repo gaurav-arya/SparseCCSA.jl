@@ -13,10 +13,10 @@ mutable struct CCSAState{T<:AbstractFloat}
     ∇fx::AbstractVecOrMat{T} # (m+1) x n linear operator of Jacobian at x
     a::AbstractVector{T} # n
     b::AbstractVector{T} # n
-    Δx::AbstractVector{T} # n
-    gλ::T
+    Δx::AbstractVector{T} # n xᵏ⁺¹ - xᵏ
+    Δx_last::AbstractVector{T} # n xᵏ - xᵏ⁻¹
+    gλ::T # Lagrange dual function value
     ∇gλ::AbstractVector{T} # m Lagrange dual function gradient
-    x⁻¹::AbstractVector{T}
 
     function CCSAState(
         n::Integer, # number of variables
@@ -45,9 +45,9 @@ mutable struct CCSAState{T<:AbstractFloat}
             Vector{T}(undef, n),
             Vector{T}(undef, n),
             Vector{T}(undef, n),
+            Vector{T}(undef, n),
             T(0),
-            Vector{T}(undef, m),
-            zeros(T, n)
+            Vector{T}(undef, m)
         )
     end
 end
@@ -66,7 +66,7 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
 end
 
 function update_conservative!(opt::CCSAState)
-    update = sign.(opt.x - opt.x⁻¹) .* sign.(opt.Δx)
+    update = sign.(opt.Δx_last) .* sign.(opt.Δx)
     for j in 1:opt.n
         if update[j] == 1
             opt.σ[j] *= 2.0
@@ -88,8 +88,8 @@ function optimize_simple(opt::CCSAState{T}) where {T}
         end
         opt.ρ *= 0.5
         update_conservative!(opt)
-        opt.x⁻¹ .= opt.x
-        opt.x .= opt.x .+ opt.Δx
+        opt.Δx_last .= opt.Δx
+        opt.x += opt.Δx
         if norm(opt.Δx) < opt.xtol_rel
             return
         end
@@ -156,7 +156,7 @@ function optimize(opt::CCSAState{T}) where {T}
         inner_iterations(opt)
         update_conservative!(opt)
         opt.ρ *= 0.5
-        opt.x⁻¹ .= opt.x
+        opt.Δx_last .= opt.Δx
         opt.x += opt.Δx
         println("Current σ after update: $(opt.σ)")
         if norm(opt.Δx) < opt.xtol_rel
