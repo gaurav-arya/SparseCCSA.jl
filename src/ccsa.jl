@@ -67,40 +67,36 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
     return [st.gλ], st.∇gλ'
 end
 
+function update_conservative!(opt::CCSAState)
+    update = sign.(opt.x - opt.x⁻¹) .* sign.(opt.Δx)
+    for j in 1:opt.n
+        if update[j] == 1
+            opt.σ[j] *= 2.0
+        elseif update[j] == -1
+            opt.σ[j] *= 0.5
+        end
+    end
+    return
+end
+
 function optimize_simple(opt::CCSAState{T}) where {T}
     while true
         while true
             dual_func!(T[], opt)
-            #println("           simple Current g(x): $(opt.gλ)")
-            #println("           simple Current f(x+Δx): $(opt.f_and_∇f(opt.x+opt.Δx)[1][1][1])")
-            if opt.gλ >= opt.f_and_∇f(opt.x + opt.Δx)[1][1]
+            if opt.gλ ≥ opt.f_and_∇f(opt.x + opt.Δx)[1][1]
                 break
             end
-            opt.ρ[1] *= 2
+            opt.ρ *= 2
         end
-        #println("       Simple Current x: $(opt.x)")
-        #println("       Simple Current Δx: $(opt.Δx)")
-        #println("       Simple Current ρ: $(opt.ρ)")
-        #println("       Simple Current σ: $(opt.σ)")
-        opt.ρ[1] *= 0.5
-        update = sign.(opt.x - opt.x⁻¹) .* sign.(opt.Δx)
-        for j in 1:opt.n
-            if update[j] == 1
-                opt.σ[j] *= 2.0
-            elseif update[j] == -1
-                opt.σ[j] *= 0.5
-            end
-        end
+        opt.ρ *= 0.5
+        update_conservative!(opt)
         opt.x⁻¹ .= opt.x
         opt.x .= opt.x .+ opt.Δx
-
         if norm(opt.Δx) < opt.xtol_rel
-            println("       Simple outer loop break now")
-            break
+            return
         end
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
     end
-    return nothing
 end
 
 function inner_iterations(opt::CCSAState{T}) where {T}
@@ -160,19 +156,7 @@ function optimize(opt::CCSAState{T}) where {T}
     # test = dual_func!(zeros(T, opt.m), opt)
     while true
         inner_iterations(opt)
-        update = sign.(opt.x - opt.x⁻¹) .* sign.(opt.Δx)
-
-        println("Current x: $(opt.x)")
-        println("Current x+Δx: $(opt.x+opt.Δx)")
-        println("Current update: $(update)")
-        println("Current σ: $(opt.σ)")
-        for j in 1:opt.n
-            if update[j] == 1
-                opt.σ[j] *= 2.0
-            elseif update[j] == -1
-                opt.σ[j] *= 0.5
-            end
-        end
+        update_conservative!(opt)
         opt.ρ *= 0.5
         opt.x⁻¹ .= opt.x
         opt.x += opt.Δx
