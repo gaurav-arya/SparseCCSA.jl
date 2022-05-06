@@ -13,7 +13,6 @@ mutable struct CCSAState{T<:AbstractFloat}
     ∇fx::AbstractVecOrMat{T} # (m+1) x n linear operator of Jacobian at x
     a::AbstractVector{T} # n
     b::AbstractVector{T} # n
-    Δx_zeroed::AbstractVector{T} # n
     Δx::AbstractVector{T} # n
     gλ::T
     ∇gλ::AbstractVector{T} # m Lagrange dual function gradient
@@ -43,7 +42,6 @@ mutable struct CCSAState{T<:AbstractFloat}
             xtol_rel,
             fx,
             ∇fx,
-            Vector{T}(undef, n),
             Vector{T}(undef, n),
             Vector{T}(undef, n),
             Vector{T}(undef, n),
