@@ -1,6 +1,6 @@
 mutable struct CCSAState{T<:AbstractFloat}
-    n::Integer # number of variables
-    m::Integer # number of inequality constraints
+    n::Integer # number of variables > 0
+    m::Integer # number of inequality constraints ≥ 0
     lb::AbstractVector{T} # n lower bounds
     ub::AbstractVector{T} # n upper bounds
     f_and_∇f::Function # f(x) = (m+1, (m+1) x n linear operator)
@@ -10,7 +10,7 @@ mutable struct CCSAState{T<:AbstractFloat}
     xtol_rel::T # relative tolerence
 
     fx::AbstractVector{T} # (m+1) x 1 function values at x
-    ∇fx::AbstractMatrix{T} # (m+1) x n linear operator of Jacobian at x
+    ∇fx::AbstractVecOrMat{T} # (m+1) x n linear operator of Jacobian at x
     a::AbstractVector{T} # n
     b::AbstractVector{T} # n
     Δx_zeroed::AbstractVector{T} # n

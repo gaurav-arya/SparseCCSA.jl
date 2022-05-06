@@ -1,6 +1,47 @@
 using SparseCCSA
 using Test
 using LinearAlgebra
+
+@testset "constructor" begin
+    nvar = 30
+    ncon = 40
+    function test_constructor(T::DataType)
+        function f_and_∇f(x)
+            rand(T, ncon + 1, nvar) * x, rand(T, ncon + 1, nvar)
+        end
+        ρ = ones(T, nvar + 1)
+        σ = ones(T, ncon)
+        x₀ = zeros(T, nvar)
+        lower_bound = -rand(T, nvar)
+        upper_bound = rand(T, nvar)
+        xtol_rel = T(1e-4)
+
+        opt₁ = CCSAState(nvar, ncon, f_and_∇f, ρ, σ, x₀)
+        @test typeof(opt₁) == CCSAState{T}
+        @test opt₁.n == nvar
+        @test opt₁.m == ncon
+        @test opt₁.x == x₀
+        @test opt₁.lb == fill(typemin(T), nvar)
+        @test opt₁.ub == fill(typemax(T), nvar)
+        @test opt₁.xtol_rel == T(1e-5)
+        opt₂ = CCSAState(nvar, ncon, f_and_∇f, ρ, σ, x₀, lb=lower_bound)
+        @test opt₂.lb == lower_bound
+        @test opt₂.ub == fill(typemax(T), nvar)
+        @test opt₂.xtol_rel == T(1e-5)
+        opt₃ = CCSAState(nvar, ncon, f_and_∇f, ρ, σ, x₀, lb=lower_bound, ub=upper_bound)
+        @test opt₃.lb == lower_bound
+        @test opt₃.ub == upper_bound
+        @test opt₃.xtol_rel == T(1e-5)
+        opt₄ = CCSAState(nvar, ncon, f_and_∇f, ρ, σ, x₀, xtol_rel=xtol_rel)
+        @test opt₄.lb == fill(typemin(T), nvar)
+        @test opt₄.ub == fill(typemax(T), nvar)
+        @test opt₄.xtol_rel == xtol_rel
+    end
+    test_constructor(Float16)
+    test_constructor(Float32)
+    test_constructor(Float64)
+end
+
 @testset "SparseCCSA.jl" begin
     # Write your tests here.
     function test1(bound)
