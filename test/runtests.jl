@@ -1,4 +1,5 @@
 using SparseCCSA
+using SparseCCSA: inner_iterations
 using Test
 using LinearAlgebra
 using SparseArrays
@@ -76,6 +77,9 @@ end
         optimize(opt)
         return opt.x
     end
+    @test test1(-1.0) ≈ [-1.0] atol = 1e-5
+    @test test1(1.0) ≈ [0.0] atol = 1e-5
+
     function test2()
         function f_and_grad(x)
             fx = [
@@ -94,16 +98,77 @@ end
         end
         n = 2
         m = 3
-        ρ = [1000.0, 1000.0, 1000.0, 1000.0] # m + 1
-        σ = [100.0, 100.0] # n
-        lb = [-100.0, -100.0]
-        ub = [100.0, 100.0]
+        ρ = fill(1000.0, m+1)
+        σ = fill(100.0, n)
+        lb = fill(-100.0, n)
+        ub = fill(100.0, n)
         x = [-5.0, 0.0]
         st = CCSAState(n, m, f_and_grad, ρ, σ, x, lb=lb, ub=ub)
         optimize(st)
         return st.x
     end
-    @test test1(-1.0) ≈ [-1.0] atol = 1e-3
-    @test test1(1.0) ≈ [0.0] atol = 1e-3
-    @test test2() ≈ [-100.0, -100.0] atol = 1e-3
+    @test test2() ≈ [-100.0, -100.0] atol = 1e-5
+
+    function test3()
+        function f(x)
+            return [sum(abs2, x), x[1] + 1.0]
+        end
+        function ∇f(x) #(m+1)*n
+            return [2x[1]; 1.0]
+        end
+        function f_and_∇f(x)
+            return f(x), ∇f(x)
+        end
+        n = 1
+        m = 1
+        σ = [30.0] #n
+        ρ = [2.0, 0.0001] * σ[1]^2 #m+1
+        x = [-10.0]
+        opt = CCSAState(n, m, f_and_∇f, ρ, σ, x)
+        optimize(opt)
+        opt.x
+    end
+    @test test3() ≈ [-1.0] atol = 1e-5
+end
+
+@testset "inner_iterations" begin
+    function f(x)
+        return [sum(abs2, x), x[1] + 1.0]
+    end
+    function ∇f(x) # (m + 1) × n
+        return [2x[1]; 1.0]
+    end
+    function f_and_∇f(x)
+        return f(x), ∇f(x)
+    end
+    n = 1
+    m = 1
+    σ = [30.0] # n
+    ρ = [2.0, 0.0001] * σ[1]^2 # m + 1
+    x = [-10.0]
+    opt = CCSAState(n, m, f_and_∇f, ρ, σ, x)
+    inner_iterations(opt)
+    @test opt.Δx ≈ [5.0] atol = 1e-5
+end
+
+@testset "no constraint" begin
+    function fundamental_no_constraints_test(n)
+        function f(x)
+            return [sum(abs2, x)]
+        end
+        function ∇f(x) # (m + 1) × n
+            return 2 * x'
+        end
+        function f_and_∇f(x)
+            return f(x), ∇f(x)
+        end
+        m = 0
+        ρ0 = [101.0] # m + 1
+        σ0 = fill(0.1, n) # n
+        x0 = fill(50.0, n) # n
+        st = CCSAState(n, m, f_and_∇f, ρ0, σ0, x0)
+        optimize(st)
+        return st.x
+    end
+    @test fundamental_no_constraints_test(6) ≈ fill(0.0, 6) atol = 1e-4
 end
