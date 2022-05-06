@@ -16,7 +16,7 @@ mutable struct CCSAState{T<:AbstractFloat}
     Δx_zeroed::AbstractVector{T} # n
     Δx::AbstractVector{T} # n
     gλ::T
-    ∇gλ::AbstractVector{T} # m+1, the extra first dimension is for convince
+    ∇gλ::AbstractVector{T} # m Lagrange dual function gradient
     x⁻¹::AbstractVector{T}
 
     function CCSAState(
@@ -48,7 +48,7 @@ mutable struct CCSAState{T<:AbstractFloat}
             Vector{T}(undef, n),
             Vector{T}(undef, n),
             T(0),
-            Vector{T}(undef, m + 1),
+            Vector{T}(undef, m),
             zeros(T, n)
         )
     end
@@ -62,11 +62,9 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
     @. st.Δx = clamp(-st.b / (2 * st.a), -st.σ, st.σ)
     @. st.Δx = clamp(st.Δx, st.lb - st.x, st.ub - st.x)
     st.gλ = dot(λ_all, st.fx) + sum(@. st.a * st.Δx^2 + st.b * st.Δx)
-    mul!(st.∇gλ, st.∇fx, st.Δx)
-    st.∇gλ += st.fx + st.ρ .* sum(@. st.Δx^2 / (2 * st.σ^2))
-    return [st.gλ], (@view st.∇gλ[2:st.m+1, :])' #[1维vector，m维vector换成矩阵]
-    # What are used in this?
-    # st.f_and_∇f, st.x, λ, st.σ, st.ρ, 
+    mul!(st.∇gλ, st.∇fx[2:end, :], st.Δx)
+    st.∇gλ += st.fx[2:end] + sum(abs2, st.Δx ./ st.σ) / 2 * st.ρ[2:end]
+    return [st.gλ], st.∇gλ'
 end
 
 function optimize_simple(opt::CCSAState{T}) where {T}
