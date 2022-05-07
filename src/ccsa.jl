@@ -17,6 +17,7 @@ mutable struct CCSAState{T<:AbstractFloat}
     Δx_last::AbstractVector{T} # n xᵏ - xᵏ⁻¹
     gλ::T # Lagrange dual function value
     ∇gλ::AbstractVector{T} # m Lagrange dual function gradient
+    dual::CCSAState{T} # Lagrange dual problem if the primal problem has constraints
 
     function CCSAState(
         n::Integer, # number of variables
@@ -30,7 +31,7 @@ mutable struct CCSAState{T<:AbstractFloat}
         xtol_rel::T=T(1e-5) # relative tolerence
     ) where {T<:AbstractFloat}
         fx, ∇fx = f_and_∇f(x₀)
-        new{T}(
+        opt = new{T}(
             n,
             m,
             lb,
@@ -49,6 +50,18 @@ mutable struct CCSAState{T<:AbstractFloat}
             T(0),
             Vector{T}(undef, m)
         )
+        if opt.m > 0
+            opt.dual = CCSAState( # Lagrange dual problem
+                opt.m, # number of Lagrange multipliers
+                0, # no inequality constraints
+                λ -> (T[], T[]),
+                [one(T)], # penality weight ρ
+                ones(T, opt.m), # radii of trust regions σ
+                ones(T, opt.m), # initial feasible point for Lagrange multipliers
+                lb=zeros(T, opt.m) # Lagrange multipliers ≥ 0 for inequality constraints
+            )
+        end
+        return opt
     end
 end
 
@@ -99,24 +112,15 @@ function inner_iterations(opt::CCSAState{T}) where {T}
     # opt.Δx is the solution of the dual problem
     # i.e. max{min{g0(x)+λ1g1(x)...}}=max{g(λ)}
     # gi are constructed by opt.ρ/opt.σ
-    opt_dual = CCSAState( # Lagrange dual problem
-        opt.m, # number of Lagrange multipliers
-        0, # no inequality constraints
-        λ -> (T[], T[]),
-        [one(T)], # penality weight ρ
-        ones(T, opt.m), # radii of trust regions σ
-        ones(T, opt.m), # initial feasible point for Lagrange multipliers
-        lb=zeros(T, opt.m) # nonnegative Lagrange multipliers for inequality constraints
-    )
     while true
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
-        opt_dual.f_and_∇f = function (λ) # negative Lagrange dual function and gradient
+        opt.dual.f_and_∇f = function (λ) # negative Lagrange dual function and gradient
             gλ, ∇gλ = dual_func!(λ, opt)
             -gλ, -∇gλ # minus signs used to change max problem to min problem
         end
-        opt_dual.fx, opt_dual.∇fx = opt_dual.f_and_∇f(opt_dual.x)
-        optimize_simple(opt_dual)
-        λ = opt_dual.x # optimal solution of Lagrange dual problem
+        opt.dual.fx, opt.dual.∇fx = opt.dual.f_and_∇f(opt.dual.x)
+        optimize_simple(opt.dual)
+        λ = opt.dual.x # optimal solution of Lagrange dual problem
         dual_func!(λ, opt)
         gᵢxᵏ⁺¹ = muladd(opt.∇fx[:, :], opt.Δx,
             opt.fx + sum(abs2, opt.Δx ./ opt.σ) / 2 * opt.ρ)
@@ -126,9 +130,9 @@ function inner_iterations(opt::CCSAState{T}) where {T}
             return
         end
         opt.ρ[.!conservative] *= 2 # increase ρ until achieving conservative approxmation
-        opt_dual.ρ .= one(T) # reinitialize penality weight
-        opt_dual.σ .= one(T) # reinitialize radii of trust region
-        opt_dual.x .= one(T) # reinitialize starting point
+        opt.dual.ρ .= one(T) # reinitialize penality weights
+        opt.dual.σ .= one(T) # reinitialize radii of trust region
+        opt.dual.x .= one(T) # reinitialize starting point
     end
 end
 
