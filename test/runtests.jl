@@ -56,7 +56,6 @@ end
     sparse_opt = CCSAState(nvar, ncon, f_and_∇f, ρ, σ, x₀)
     # Dense Jacobian should not be allocated if sparsity is provided
     @test typeof(sparse_opt.∇fx) <: AbstractSparseMatrix
-    @test typeof(sparse_opt.∇fx) <: DenseMatrix broken = true
 end
 
 @testset "integration" begin
