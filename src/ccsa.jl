@@ -99,25 +99,24 @@ function inner_iterations(opt::CCSAState{T}) where {T}
     # opt.Δx is the solution of the dual problem
     # i.e. max{min{g0(x)+λ1g1(x)...}}=max{g(λ)}
     # gi are constructed by opt.ρ/opt.σ
-    ρ_again = [one(T)]
-    σ_again = ones(T, opt.m)
+    opt_dual = CCSAState( # Lagrange dual problem
+        opt.m, # number of Lagrange multipliers
+        0, # no inequality constraints
+        λ -> (T[], T[]),
+        [one(T)], # penality weight ρ
+        ones(T, opt.m), # radii of trust regions σ
+        ones(T, opt.m), # initial feasible point for Lagrange multipliers
+        lb=zeros(T, opt.m) # nonnegative Lagrange multipliers for inequality constraints
+    )
     while true
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
-        Lagrange_dual(λ) = begin
+        opt_dual.f_and_∇f = function (λ) # negative Lagrange dual function and gradient
             gλ, ∇gλ = dual_func!(λ, opt)
             -gλ, -∇gλ # minus signs used to change max problem to min problem
         end
-        opt_again = CCSAState( # Lagrange dual problem
-            opt.m, # number of Lagrange multipliers
-            0, # no inequality constraints
-            Lagrange_dual, # negative Lagrange dual function and gradient
-            ρ_again, # penality weight
-            σ_again, # radii of trust regions
-            ones(T, opt.m), # initial feasible point
-            lb=zeros(T, opt.m) # nonnegative Lagrange multipliers for inequality constraints
-        )
-        optimize_simple(opt_again)
-        λ = opt_again.x # result of Lagrange dual problem
+        opt_dual.fx, opt_dual.∇fx = opt_dual.f_and_∇f(opt_dual.x)
+        optimize_simple(opt_dual)
+        λ = opt_dual.x # optimal solution of Lagrange dual problem
         dual_func!(λ, opt)
         gᵢxᵏ⁺¹ = muladd(opt.∇fx[:, :], opt.Δx,
             opt.fx + sum(abs2, opt.Δx ./ opt.σ) / 2 * opt.ρ)
@@ -127,6 +126,9 @@ function inner_iterations(opt::CCSAState{T}) where {T}
             return
         end
         opt.ρ[.!conservative] *= 2 # increase ρ until achieving conservative approxmation
+        opt_dual.ρ .= one(T) # reinitialize penality weight
+        opt_dual.σ .= one(T) # reinitialize radii of trust region
+        opt_dual.x .= one(T) # reinitialize starting point
     end
 end
 
