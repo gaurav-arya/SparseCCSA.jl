@@ -60,8 +60,8 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
     @. st.Δx = clamp(-st.b / (2 * st.a), -st.σ, st.σ)
     @. st.Δx = clamp(st.Δx, st.lb - st.x, st.ub - st.x)
     st.gλ = dot(λ_all, st.fx) + sum(@. st.a * st.Δx^2 + st.b * st.Δx)
-    mul!(st.∇gλ, st.∇fx[2:end, :], st.Δx)
-    st.∇gλ += st.fx[2:end] + sum(abs2, st.Δx ./ st.σ) / 2 * st.ρ[2:end]
+    st.∇gλ = muladd(st.∇fx[2:end, :], st.Δx,
+        st.fx[2:end] + sum(abs2, st.Δx ./ st.σ) / 2 * st.ρ[2:end])
     return [st.gλ], st.∇gλ'
 end
 
@@ -119,9 +119,8 @@ function inner_iterations(opt::CCSAState{T}) where {T}
         optimize_simple(opt_again)
         λ = opt_again.x # result of Lagrange dual problem
         dual_func!(λ, opt)
-        gᵢxᵏ⁺¹ = similar(opt.fx) # TODO: avoid heap allocation
-        mul!(gᵢxᵏ⁺¹, opt.∇fx, opt.Δx)
-        gᵢxᵏ⁺¹ += opt.fx + sum(abs2, opt.Δx ./ opt.σ) * 0.5 * opt.ρ
+        gᵢxᵏ⁺¹ = muladd(opt.∇fx[:, :], opt.Δx,
+            opt.fx + sum(abs2, opt.Δx ./ opt.σ) / 2 * opt.ρ)
         fᵢxᵏ⁺¹ = opt.f_and_∇f(opt.x + opt.Δx)[1]
         conservative = gᵢxᵏ⁺¹ .≥ fᵢxᵏ⁺¹
         if all(conservative)
