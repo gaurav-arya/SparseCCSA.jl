@@ -146,6 +146,7 @@ function optimize(opt::CCSAState{T}) where {T}
         update_trust_region_and_penalty!(opt)
         opt.x += opt.Δx
         if norm(opt.Δx) < opt.xtol_rel # TODO: adjust stop criteria
+        # if all(@. abs(opt.Δx / opt.x) < opt.xtol_rel || abs(opt.x) < eps(T))
             return
         end
         opt.Δx_last = opt.Δx
