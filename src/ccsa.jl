@@ -76,26 +76,24 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
     mul!(st.∇gλ, st.∇fx, st.Δx)
     st.∇gλ .+= st.fx .+ st.ρ .* sum((st.Δx).^2 ./ (2 .* (st.σ).^2))
     return [st.gλ], (@view st.∇gλ[2:st.m+1,:])' 
-
 end
 # optimize problem with no constraint
 function optimize_simple(opt::CCSAState{T}) where {T}
     while true
         while true
-            dual_func!(T[], opt)
+            @. opt.a = (opt.ρ[1] / opt.σ ^ 2 / 2)
+            @. opt.Δx = clamp( - opt.∇fx' / (2 * opt.a), -opt.σ, opt.σ)
+            @. opt.Δx = clamp(opt.Δx, opt.lb - opt.x, opt.ub - opt.x)
+            opt.gλ = opt.fx[1] + sum(@. opt.a * opt.Δx^2 + opt.∇fx' * opt.Δx)
             if opt.gλ ≥ opt.f_and_∇f(opt.x + opt.Δx)[1][1] # check conservative
                 break
             end
             opt.ρ *= 2
         end
         opt.ρ /= 2 
-        for i in 1:opt.n
-            if signbit(opt.Δx_last[i]) == signbit(opt.Δx[i])
-                opt.σ[i]*=2
-            else
-                opt.σ[i]/=2
-            end
-        end
+        monotonic = signbit.(opt.Δx_last) .== signbit.(opt.Δx) # signbit avoid multiplication
+        opt.σ[monotonic] *= 2 # double trust region if xⱼ moves monotomically
+        opt.σ[.!monotonic] /= 2 # shrink trust region if xⱼ oscillates
         opt.x .+= opt.Δx
         opt.Δx_last .= opt.Δx
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
@@ -136,13 +134,9 @@ function optimize(opt::CCSAState{T}) where {T}
     while true
         inner_iterations(opt)
         opt.ρ /= 2 
-        for i in 1:opt.n
-            if signbit(opt.Δx_last[i]) == signbit(opt.Δx[i])
-                opt.σ[i]*=2
-            else
-                opt.σ[i]/=2
-            end
-        end
+        monotonic = signbit.(opt.Δx_last) .== signbit.(opt.Δx) # signbit avoid multiplication
+        opt.σ[monotonic] *= 2 # double trust region if xⱼ moves monotomically
+        opt.σ[.!monotonic] /= 2 # shrink trust region if xⱼ oscillates
         opt.x .+= opt.Δx
         if norm(opt.Δx, Inf) < opt.xtol_rel
             return

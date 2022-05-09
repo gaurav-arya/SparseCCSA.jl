@@ -1,8 +1,10 @@
 include("../src/ccsa.jl")
-using Test
 using LinearAlgebra
 using CatViews
 using BenchmarkTools
+using Profile
+using ProfileView
+using PProf
 a1=2;b1=0;a2=-1;b2=1;
 function f(x)
     return [sqrt(x[2]),(a1*x[1]+b1)^3-x[2],(a2*x[1]+b2)^3-x[2]]
@@ -23,3 +25,4 @@ opt=CCSAState(n,m,f_and_∇f,ρ,σ,x)
 opt.lb=lb
 opt.xtol_rel = 1e-4
 @time optimize(opt)
+ProfileView.@profview optimize(opt)
