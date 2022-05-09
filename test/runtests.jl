@@ -97,7 +97,7 @@ end
         end
         n = 2
         m = 3
-        ρ = fill(1000.0, m + 1)
+        ρ = fill(1000.0, m+1)
         σ = fill(100.0, n)
         lb = fill(-100.0, n)
         ub = fill(100.0, n)
@@ -170,42 +170,4 @@ end
         return st.x
     end
     @test fundamental_no_constraints_test(6) ≈ fill(0.0, 6) atol = 1e-4
-end
-
-@testset "NLopt.jl tutuorial" begin
-    function myfunc(x::Vector, grad::AbstractVector)
-        if length(grad) > 0
-            grad[1] = 0
-            grad[2] = 0.5 / sqrt(x[2])
-        end
-        sqrt(x[2])
-    end
-
-    function myconstraint(x::Vector, grad::AbstractVector, a, b)
-        if length(grad) > 0
-            grad[1] = 3a * (a * x[1] + b)^2
-            grad[2] = -1
-        end
-        (a * x[1] + b)^3 - x[2]
-    end
-
-    n = 2
-    m = 2
-    function f_and_∇f(x)
-        f = Vector{Float64}(undef, m + 1)
-        ∇f = Matrix{Float64}(undef, m + 1, n)
-        f[1] = myfunc(x, @view ∇f[1, :])
-        f[2] = myconstraint(x, (@view ∇f[2, :]), 2, 0)
-        f[3] = myconstraint(x, (@view ∇f[3, :]), -1, 1)
-        f, ∇f
-    end
-    lower_bounds = [-Inf, 0.0]
-    xtol_rel = 1e-4
-    x₀ = [1.234, 5.678]
-    ρ = ones(m + 1)
-    σ = ones(n)
-    opt = CCSAState(n, m, f_and_∇f, ρ, σ, x₀, lb=lower_bounds, xtol_rel=xtol_rel)
-    optimize(opt)
-    @test opt.x[1] ≈ 1 / 3 rtol = 1e-4
-    @test opt.x[2] ≈ 8 / 27 rtol = 1e-3
 end
