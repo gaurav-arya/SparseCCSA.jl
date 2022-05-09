@@ -18,7 +18,6 @@ mutable struct CCSAState{T<:AbstractFloat}
     gλ::T # Lagrange dual function value
     ∇gλ::AbstractVector{T} # m Lagrange dual function gradient
     dual::CCSAState{T} # Lagrange dual problem if the primal problem has constraints
-
     function CCSAState(
         n::Integer, # number of variables
         m::Integer, # number of inequality constraints
@@ -48,7 +47,7 @@ mutable struct CCSAState{T<:AbstractFloat}
             Vector{T}(undef, n),
             Vector{T}(undef, n),
             T(0),
-            Vector{T}(undef, m)
+            Vector{T}(undef, m+1)
         )
         if opt.m > 0
             opt.dual = CCSAState( # Lagrange dual problem
@@ -64,28 +63,21 @@ mutable struct CCSAState{T<:AbstractFloat}
         return opt
     end
 end
-
 # Returns the dual function g(λ) and ∇g(λ)
 function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
     λ_all = CatView([one(T)], λ)
     st.a .= dot(st.ρ, λ_all) ./ (2 .* st.σ .^ 2)
     mul!(st.b, st.∇fx', λ_all)
-    @. st.Δx = clamp(-st.b / (2 * st.a), -st.σ, st.σ)
-    @. st.Δx = clamp(st.Δx, st.lb - st.x, st.ub - st.x)
+    for j in 1:st.n
+        st.Δx[j] = clamp(-st.b[j] / (2 * st.a[j]), -st.σ[j], st.σ[j])
+        st.Δx[j] = clamp(st.Δx[j], st.lb[j] - st.x[j], st.ub[j] - st.x[j])
+    end
     st.gλ = dot(λ_all, st.fx) + sum(@. st.a * st.Δx^2 + st.b * st.Δx)
-    st.∇gλ = muladd(st.∇fx[2:end, :], st.Δx,
-        st.fx[2:end] + sum(abs2, st.Δx ./ st.σ) / 2 * st.ρ[2:end])
-    return [st.gλ], st.∇gλ'
-end
+    mul!(st.∇gλ, st.∇fx, st.Δx)
+    st.∇gλ .+= st.fx .+ st.ρ .* sum((st.Δx).^2 ./ (2 .* (st.σ).^2))
+    return [st.gλ], (@view st.∇gλ[2:st.m+1,:])' 
 
-function update_trust_region_and_penalty!(opt::CCSAState)
-    opt.ρ *= 0.5 # reduce penality wight to allow larger subsequent steps if possible
-    monotonic = signbit.(opt.Δx_last) .== signbit.(opt.Δx) # signbit avoid multiplication
-    opt.σ[monotonic] *= 2 # double trust region if xⱼ moves monotomically
-    opt.σ[.!monotonic] *= 0.5 # shrink trust region if xⱼ oscillates
-    return
 end
-
 # optimize problem with no constraint
 function optimize_simple(opt::CCSAState{T}) where {T}
     while true
@@ -96,22 +88,24 @@ function optimize_simple(opt::CCSAState{T}) where {T}
             end
             opt.ρ *= 2
         end
-        update_trust_region_and_penalty!(opt)
-        opt.x += opt.Δx
-        if norm(opt.Δx) < opt.xtol_rel
+        opt.ρ /= 2 
+        for i in 1:opt.n
+            if signbit(opt.Δx_last[i]) == signbit(opt.Δx[i])
+                opt.σ[i]*=2
+            else
+                opt.σ[i]/=2
+            end
+        end
+        opt.x .+= opt.Δx
+        opt.Δx_last .= opt.Δx
+        opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
+        if norm(opt.Δx, Inf) < opt.xtol_rel
             return
         end
-        opt.Δx_last = opt.Δx
-        opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
     end
 end
-
 function inner_iterations(opt::CCSAState{T}) where {T}
-    # input: opt::CCSAState
-    # output: update opt.Δx
-    # opt.Δx is the solution of the dual problem
-    # i.e. max{min{g0(x)+λ1g1(x)...}}=max{g(λ)}
-    # gi are constructed by opt.ρ/opt.σ
+    gᵢxᵏ⁺¹=Array{T}(undef,opt.m+1)
     while true
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
         opt.dual.f_and_∇f = function (λ) # negative Lagrange dual function and gradient
@@ -120,10 +114,9 @@ function inner_iterations(opt::CCSAState{T}) where {T}
         end
         opt.dual.fx, opt.dual.∇fx = opt.dual.f_and_∇f(opt.dual.x)
         optimize_simple(opt.dual)
-        λ = opt.dual.x # optimal solution of Lagrange dual problem
-        dual_func!(λ, opt)
-        gᵢxᵏ⁺¹ = muladd(opt.∇fx[:, :], opt.Δx,
-            opt.fx + sum(abs2, opt.Δx ./ opt.σ) / 2 * opt.ρ)
+        #dual_func!(opt.dual.x , opt)# optimal solution of Lagrange dual problem
+        mul!(gᵢxᵏ⁺¹,opt.∇fx, opt.Δx)
+        gᵢxᵏ⁺¹ .+= opt.fx + sum(abs2, opt.Δx ./ opt.σ) .* opt.ρ ./2
         fᵢxᵏ⁺¹ = opt.f_and_∇f(opt.x + opt.Δx)[1]
         conservative = gᵢxᵏ⁺¹ .≥ fᵢxᵏ⁺¹
         if all(conservative)
@@ -135,7 +128,6 @@ function inner_iterations(opt::CCSAState{T}) where {T}
         opt.dual.x .= one(T) # reinitialize starting point
     end
 end
-
 function optimize(opt::CCSAState{T}) where {T}
     if opt.m == 0
         optimize_simple(opt)
@@ -143,12 +135,18 @@ function optimize(opt::CCSAState{T}) where {T}
     end
     while true
         inner_iterations(opt)
-        update_trust_region_and_penalty!(opt)
-        opt.x += opt.Δx
-        if norm(opt.Δx) < opt.xtol_rel # TODO: adjust stop criteria
-        # if all(@. abs(opt.Δx / opt.x) < opt.xtol_rel || abs(opt.x) < eps(T))
+        opt.ρ /= 2 
+        for i in 1:opt.n
+            if signbit(opt.Δx_last[i]) == signbit(opt.Δx[i])
+                opt.σ[i]*=2
+            else
+                opt.σ[i]/=2
+            end
+        end
+        opt.x .+= opt.Δx
+        if norm(opt.Δx, Inf) < opt.xtol_rel
             return
         end
-        opt.Δx_last = opt.Δx
+        opt.Δx_last .= opt.Δx
     end
 end
