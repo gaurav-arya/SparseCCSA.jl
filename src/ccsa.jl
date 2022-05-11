@@ -22,9 +22,9 @@ mutable struct CCSAState{T<:AbstractFloat}
         n::Integer, # number of variables
         m::Integer, # number of inequality constraints
         f_and_∇f::Function,
-        penality_weight::AbstractVector{T}, # (m + 1) penality weight ρ
-        trust_radius::AbstractVector{T}, # n radius of trust region σ
-        x₀::AbstractVector{T}; # initial feasible point
+        penality_weight::AbstractVector{T} = ones(m + 1), # (m + 1) penality weight ρ
+        trust_radius::AbstractVector{T} = ones(n), # n radius of trust region σ
+        x₀::AbstractVector{T}= zeros(n); # initial feasible point
         lb::AbstractVector{T}=fill(typemin(T), n), # lower bounds, default -Inf
         ub::AbstractVector{T}=fill(typemax(T), n), # upper bounds, default Inf
         xtol_rel::T=T(1e-5) # relative tolerence
@@ -79,7 +79,11 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
 end
 # optimize problem with no constraint
 function optimize_simple(opt::CCSAState{T}) where {T}
+    iters=0
+    fvalue=Float64[]
+    monotonic=BitVector(ones(opt.n).==ones(opt.n))
     while true
+        iters+=1
         while true
             @. opt.a = (opt.ρ[1] / opt.σ ^ 2 / 2)
             @. opt.Δx = clamp( - opt.∇fx' / (2 * opt.a), -opt.σ, opt.σ)
@@ -97,13 +101,15 @@ function optimize_simple(opt::CCSAState{T}) where {T}
         opt.x .+= opt.Δx
         opt.Δx_last .= opt.Δx
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
+        append!(fvalue,opt.fx)
         if norm(opt.Δx, Inf) < opt.xtol_rel
-            return
+            return fvalue
         end
     end
 end
 function inner_iterations(opt::CCSAState{T}) where {T}
     gᵢxᵏ⁺¹=Array{T}(undef,opt.m+1)
+    monotonic=BitVector(ones(opt.n).==ones(opt.n))
     while true
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
         opt.dual.f_and_∇f = function (λ) # negative Lagrange dual function and gradient
@@ -128,19 +134,22 @@ function inner_iterations(opt::CCSAState{T}) where {T}
 end
 function optimize(opt::CCSAState{T}) where {T}
     if opt.m == 0
-        optimize_simple(opt)
-        return
+        return optimize_simple(opt)
     end
+    iters=0
+    monotonic=BitVector{ones(opt.n).==ones(opt.n)}
     while true
         inner_iterations(opt)
         opt.ρ /= 2 
-        monotonic = signbit.(opt.Δx_last) .== signbit.(opt.Δx) # signbit avoid multiplication
+        monotonic .= signbit.(opt.Δx_last) .== signbit.(opt.Δx) # signbit avoid multiplication
         opt.σ[monotonic] *= 2 # double trust region if xⱼ moves monotomically
         opt.σ[.!monotonic] /= 2 # shrink trust region if xⱼ oscillates
         opt.x .+= opt.Δx
         if norm(opt.Δx, Inf) < opt.xtol_rel
-            return
+            return iters
         end
         opt.Δx_last .= opt.Δx
+        iters+=1
     end
+    return iters
 end
