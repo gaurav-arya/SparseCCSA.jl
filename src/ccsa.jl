@@ -1,4 +1,4 @@
-mutable struct CCSAState{T<:Real}
+mutable struct CCSAState{T<:AbstractFloat}
     n::Int # number of variables
     m::Int # number of constraints
     lb::AbstractVector{T} # n
@@ -7,7 +7,8 @@ mutable struct CCSAState{T<:Real}
     ρ::AbstractVector{T} # m + 1
     σ::AbstractVector{T} # n
     x::AbstractVector{T} # current best guess
-    xtol_rel::Float64
+    xtol_rel::T
+    max_iters::Integer
     # Above are essential
     # Below are temp
     fx::AbstractVector{T} # (m+1) x 1 output at x
@@ -18,21 +19,26 @@ mutable struct CCSAState{T<:Real}
     Δx::AbstractVector{T} # n
     gλ::T
     ∇gλ::AbstractVector{T} # m+1, the extra first dimension is for convince
-    x⁻¹::AbstractVector{T}
-    function CCSAState(n,m,f_and_fgrad,ρ,σ,x)
-        return new{Float64}(n,m,ones(n)*(-2^20),ones(n)*(2^20),f_and_fgrad,ρ,σ,x,1e-5,zeros(m+1),zeros(m+1,n),zeros(n),zeros(n),zeros(n),ones(n),0,zeros(m+1),zeros(n))
+    Δx_last::AbstractVector{T}
+    iters::Integer
+    function CCSAState(
+        n::Integer,
+        m::Integer,
+        f_and_∇f::Function,
+        x::AbstractVector{T}=zeros(T,n);
+        ρ::AbstractVector{T}=ones(T,m+1),
+        σ::AbstractVector{T}=ones(T,n),
+        lb::AbstractVector{T}=fill(typemin(T), n),
+        ub::AbstractVector{T}=fill(typemax(T), n),
+        xtol_rel::T=1e-4,
+        max_iters::Integer=typemax(Int)
+        ) where {T<:AbstractFloat}
+        fx, ∇fx = f_and_∇f(x)
+        return new{T}(n,m,lb,ub,f_and_∇f,ρ,σ,x,xtol_rel,max_iters,fx,∇fx, Vector{T}(undef, n), Vector{T}(undef, n), Vector{T}(undef, n), Vector{T}(undef, n),T(0), Vector{T}(undef, m+1), Vector{T}(undef, n),0)
     end
-    function CCSAState(n,m,f_and_fgrad,ρ,σ,x,lb)
-        return new{Float64}(n,m,lb,ones(n)*(2^20),f_and_fgrad,ρ,σ,x,1e-5,zeros(m+1),zeros(m+1,n),zeros(n),zeros(n),zeros(n),ones(n),0,zeros(m+1),zeros(n))
-    end
-    function CCSAState(n,m,f_and_fgrad,ρ,σ,x,lb,ub)
-        return new{Float64}(n,m,lb,ub,f_and_fgrad,ρ,σ,x,1e-5,zeros(m+1),zeros(m+1,n),zeros(n),zeros(n),zeros(n),ones(n),0,zeros(m+1),zeros(n))
-    end
-    # TODO: Does Julia has something like "Inf" ?
 end
-
 # Returns the dual function g(λ) and ∇g(λ)
-function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
+function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
     λ_all = CatView([one(T)], λ)
     st.a .= dot(st.ρ, λ_all) ./ (2 .* (st.σ).^2)
     mul!(st.b, st.∇fx', λ_all)
@@ -42,80 +48,51 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState) where {T}
     mul!(st.∇gλ, st.∇fx, st.Δx)
     st.∇gλ .+= st.fx
     st.∇gλ .+= st.ρ.*sum((st.Δx).^2 ./ (2 .* (st.σ).^2))
-    return [st.gλ], (@view st.∇gλ[2:st.m+1,:])' #[1维vector，m维vector换成矩阵]
-    # What are used in this?
-    # st.f_and_∇f, st.x, λ, st.σ, st.ρ, 
+    return [st.gλ], (@view st.∇gλ[2:st.m+1,:])'
 end
 function optimize_simple(opt::CCSAState)
-    while true
+    monotonic=BitVector(undef,opt.n)
+    while opt.iters<opt.max_iters
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
+        opt.a .= opt.ρ[1]/2 ./ (opt.σ).^2
+        opt.b .= opt.∇fx'
         while true
-            dual_func!(Float64[], opt)
-            #println("           simple Current g(x): $(opt.gλ)")
-            #println("           simple Current f(x+Δx): $(opt.f_and_∇f(opt.x+opt.Δx)[1][1][1])")
+            @. opt.Δx = clamp(-opt.b / (2 * opt.a), -opt.σ, opt.σ)
+            @. opt.Δx = clamp(opt.Δx, opt.lb-opt.x, opt.ub-opt.x)
+            opt.gλ = opt.fx[1] + sum(@. (opt.a)*(opt.Δx)^2+(opt.b)*(opt.Δx))
             if opt.gλ >= opt.f_and_∇f(opt.x+opt.Δx)[1][1]
                 break
             end
-            opt.ρ[1] *= 2
+            opt.ρ *= 2
+            opt.a *= 2
         end
-        #println("       Simple Current x: $(opt.x)")
-        #println("       Simple Current Δx: $(opt.Δx)")
-        #println("       Simple Current ρ: $(opt.ρ)")
-        #println("       Simple Current σ: $(opt.σ)")
-        opt.ρ[1] *= 0.5
-        update =  sign.(opt.x - opt.x⁻¹).*sign.(opt.Δx)
-        for j in 1:opt.n
-            if update[j] == 1
-                opt.σ[j] *= 2.0
-            elseif update[j] == -1
-                opt.σ[j] *= 0.5
-            end
-        end 
-        opt.x⁻¹ .= opt.x
+        opt.ρ /=2
+        monotonic .= signbit.(opt.Δx_last) .== signbit.(opt.Δx) 
+        opt.σ[monotonic] *= 2 
+        opt.σ[.!monotonic] /= 2
+        opt.Δx_last .= opt.Δx
         opt.x .= opt.x .+ opt.Δx
-
-        if norm(opt.Δx) < opt.xtol_rel
-            println("       Simple outer loop break now")
+        if norm(opt.Δx,Inf) < opt.xtol_rel
             break
         end
     end
-    return nothing
 end
 function inner_iterations(opt::CCSAState)
-# input: opt::CCSAState
-# output: update opt.Δx
-# opt.Δx is the solution of the dual problem
-# i.e. max{min{g0(x)+λ1g1(x)...}}=max{g(λ)}
-# gi are constructed by opt.ρ/opt.σ
-    ρ_again=[1.0]
-    σ_again=ones(opt.m)
+    max_problem(λ)= begin 
+        result=dual_func!(λ,opt) 
+        -result[1], -result[2]
+    end
+    g₍ₓ₎=similar(opt.fx)
+    conservative=BitVector(undef,opt.m+1)
+    opt_again=CCSAState(opt.m,0,max_problem,zeros(opt.m),lb=zeros(opt.m)) 
     while true
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
-        max_problem(λ)= begin 
-            result=dual_func!(λ,opt) 
-            -result[1], -result[2]
-        end
-        opt_again=CCSAState(opt.m,0,max_problem,ρ_again,σ_again,zeros(opt.m),zeros(opt.m)) 
         optimize_simple(opt_again) 
         dual_func!(opt_again.x,opt)
-        println("   inner The optimal of dual λ: $(opt_again.x)")
-        println("   inner The optimal of dual x: $(opt.x)")
-        println("   inner The optimal of dual x+Δx: $(opt.x+opt.Δx)")
-        g₍ₓ₎=similar(opt.fx)
         mul!(g₍ₓ₎,opt.∇fx,opt.Δx)
-        g₍ₓ₎.+=opt.fx
-        g₍ₓ₎ .+= 0.5 .* (opt.ρ) .* sum(abs2,(opt.Δx)./(opt.σ))
-        println("   inner Current f(x+Δx): $(opt.f_and_∇f(opt.x+opt.Δx)[1])")
-        println("   inner Current g(x): $(g₍ₓ₎)")
-        #println("       g(x)inner Current opt.fx: $(opt.fx)")
-        #println("       g(x)inner Current opt.∇fx: $(opt.∇fx)")
-        #println("       g(x)inner Current opt.∇fx*opt.Δx: $(opt.∇fx*opt.Δx)")
-        #println("       g(x)inner Current 2-defree: $(0.5 .* (opt.ρ) .* sum(abs2,(opt.Δx)./(opt.σ)))")
-        println("   inner Current ρ: $(opt.ρ)")
-        println("   inner Current σ: $(opt.σ)")
-        println("   ####################################")
-        println("   ####################################")
-        conservative = ( g₍ₓ₎ .>= opt.f_and_∇f(opt.x+opt.Δx)[1])
+        g₍ₓ₎ .+= opt.fx
+        g₍ₓ₎ .+= 2 .* (opt.ρ) .* sum(abs2,(opt.Δx)./(opt.σ))
+        conservative .= ( g₍ₓ₎ .>= opt.f_and_∇f(opt.x+opt.Δx)[1])
         if all(conservative)
             break
         end
@@ -123,33 +100,25 @@ function inner_iterations(opt::CCSAState)
     end
 end
 
-function optimize(opt::CCSAState)
+function optimize(opt::CCSAState;callback=nothing)
     if opt.m==0
         optimize_simple(opt)
-        return nothing
     end
-    test=dual_func!(zeros(opt.m),opt)
-    while true
+    monotonic=BitVector(undef,opt.n)
+    while opt.iters<opt.max_iters
         inner_iterations(opt)
-        update =  sign.(opt.x - opt.x⁻¹).*sign.(opt.Δx)
-
-        println("Current x: $(opt.x)")
-        println("Current x+Δx: $(opt.x+opt.Δx)")
-        println("Current update: $(update)")
-        println("Current σ: $(opt.σ)")
-        for j in 1:opt.n
-            if update[j] == 1
-                opt.σ[j] *= 2.0
-            elseif update[j] == -1
-                opt.σ[j] *= 0.5
-            end
-        end 
-        opt.ρ .*= 0.5
-        opt.x⁻¹ .= opt.x
+        monotonic .= signbit.(opt.Δx_last) .== signbit.(opt.Δx) 
+        opt.σ[monotonic] *= 2 
+        opt.σ[.!monotonic] /= 2
+        opt.ρ /=2
+        opt.Δx_last .= opt.Δx
         opt.x .= opt.x .+ opt.Δx
-        println("Current σ after update: $(opt.σ)")
-        if norm(opt.Δx) < opt.xtol_rel
+        if norm(opt.Δx,Inf) < opt.xtol_rel
             break
+        end
+        opt.iters+=1
+        if callback!=nothing
+            callback()
         end
     end
 end

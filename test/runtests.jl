@@ -16,14 +16,14 @@ using LinearAlgebra
         x=[-10.0]
         lb=[-100.0]
         ub=[100.0]
-        opt=CCSAState(n,m,f_and_∇f,ρ,σ,x,lb,ub)
+        opt=CCSAState(n,m,f_and_∇f,x,ρ=ρ,σ=σ,lb=lb,ub=ub)
         optimize(opt)
         return opt.x
     end
     function test2()
         function f_and_grad(x)
             fx = [x[1]^2 * x[2], x[1] - 3, x[1] + 4, x[2] - 4]
-            gradx = [2*x[1] x[1]^2; 1 0; 1 0; 0 1]
+            gradx = [2*x[1]* x[2] x[1]^2; 1 0; 1 0; 0 1]
             fx, gradx
         end
         n=2
@@ -33,11 +33,12 @@ using LinearAlgebra
         lb=[-100.0,-100.0]
         ub=[100.0,100.0]
         x=[0.0,0.0]
-        st = CCSAState(n,m,f_and_grad,ρ,σ,x,lb,ub)
+        xtol_rel=1e-6
+        st = CCSAState(n,m,f_and_grad,x,ρ=ρ,σ=σ,lb=lb,ub=ub,xtol_rel=xtol_rel)
         optimize(st)
         return st.x
     end
-    @test norm(test1(-1)-[-1.0 ])<0.001 # the constraint is tight
+    @test norm(test1(-1)-[-1.0])<0.001 # the constraint is tight
     @test norm(test1(1)-[0.])<0.001 # the constraint is tight
     @test norm(test2()-[-100.0, -100.0])<1.0 # the box constraint is tight
 end

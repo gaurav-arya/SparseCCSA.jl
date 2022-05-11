@@ -1,40 +1,21 @@
-include("../src/ccsa.jl")
-using Test
-using LinearAlgebra
-using CatViews
-function test1()
-    function f_and_∇f(x)
-        f=[sum(abs2,x),x[1]+1.0]
-        ∇f=[2x[1];1.0;;]
-        return f,∇f
-    end
-    n=1
-    m=1
-    σ=[30.0] #n
-    ρ=[2.0,0.0001]*σ[1]^2 #m+1
-    x=[-10.0]
-    lb=[-100.0]
-    ub=[100.0]
-    opt=CCSAState(n,m,f_and_∇f,ρ,σ,x,lb,ub)
-    optimize(opt)
-    return opt.x
+using SparseCCSA
+# Problem:
+# minimize x₁²+x₂²+x₃²
+# subject to x₁ <= -1
+# x∈Domain=R×R×[5,15]
+n=3 # number of variables
+m=1 # number of constraints
+function f_and_∇f(x)
+    f=[sum(abs2,x),x[1]+1]
+    ∇f=[2x[1] 2x[2] 2x[3]; 1.0 0.0 0.0]
+    return f,∇f #f is a length m+1 vector, ∇f is a (m+1)*n matrix
 end
-test1()
-function test2()
-    function f_and_grad(x)
-        fx = [x[1]^2 * x[2], x[1] - 3, x[1] + 4, x[2] - 4]
-        gradx = [2*x[1] x[1]^2; 1 0; 1 0; 0 1]
-        fx, gradx
-    end
-    n=2
-    m=3
-    ρ=[1000.,1000.,1000.,1000.] #m+1
-    σ=[100.,100.] #n
-    lb=[-100.0,-100.0]
-    ub=[100.0,100.0]
-    x=[0.0,0.0]
-    st = CCSAState(n,m,f_and_grad,ρ,σ,x,lb,ub)
-    optimize(st)
-    return st.x
+function cb() #callback
+    println(opt.x)
 end
-test2()
+x=[-1000.0,-1000.0,10.0]
+lb=[-Inf,-Inf,5.0]
+ub=[Inf,Inf,15.0]
+opt=CCSAState(n,m,f_and_∇f,x,lb=lb,ub=ub,max_iters=1000)
+optimize(opt,callback=cb)
+println("got $(opt.fx[1]) at $(opt.x) after $(opt.iters) iterations")
