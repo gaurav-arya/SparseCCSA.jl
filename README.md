@@ -2,8 +2,7 @@
 ## Tutorial
 
 The following example code solves the nonlinearly constrained minimization problem
-<!-- $\displaystyle{\min_{x\in\mathbb{R}\times\mathbb{R}\times[5,15]} \quad {x_1^2+x_2^2+x_3^2 } \quad s.t.\  x_1 \leq -1  }$ --> 
-<img style="transform: translateY(0.1em); background: white;" src="svg\5eYzsVN1qK.svg">
+<img src="https://latex.codecogs.com/svg.latex?\min_{x\in\mathbb{R}\times\mathbb{R}\times[5,15]}\quad%20x_1^2+x_2^2+x_3^2\quad\textrm{s.t.%20}x_1\leq-1">
 
 ```julia
 using SparseCCSA
