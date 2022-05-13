@@ -21,6 +21,7 @@ mutable struct CCSAState{T<:AbstractFloat}
     ∇gλ::AbstractVector{T} # m+1, the extra first dimension is for convince
     Δx_last::AbstractVector{T}
     iters::Integer
+    f_and_∇f!::Function
     function CCSAState(
         n::Integer,
         m::Integer,
@@ -31,10 +32,11 @@ mutable struct CCSAState{T<:AbstractFloat}
         lb::AbstractVector{T}=fill(typemin(T), n),
         ub::AbstractVector{T}=fill(typemax(T), n),
         xtol_rel::T=1e-4,
-        max_iters::Integer=typemax(Int)
+        max_iters::Integer=typemax(Int),
+        f_and_∇f!::Function=f_and_∇f
         ) where {T<:AbstractFloat}
         fx, ∇fx = f_and_∇f(x)
-        return new{T}(n,m,lb,ub,f_and_∇f,ρ,σ,x,xtol_rel,max_iters,fx,∇fx, Vector{T}(undef, n), Vector{T}(undef, n), Vector{T}(undef, n), Vector{T}(undef, n),T(0), Vector{T}(undef, m+1), Vector{T}(undef, n),0)
+        return new{T}(n,m,lb,ub,f_and_∇f,ρ,σ,x,xtol_rel,max_iters,fx,∇fx, Vector{T}(undef, n), Vector{T}(undef, n), Vector{T}(undef, n), Vector{T}(undef, n),T(0), Vector{T}(undef, m+1), Vector{T}(undef, n),0,f_and_∇f!)
     end
 end
 # Returns the dual function g(λ) and ∇g(λ)
@@ -50,10 +52,28 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
     st.∇gλ .+= st.ρ.*sum((st.Δx).^2 ./ (2 .* (st.σ).^2))
     return [st.gλ], (@view st.∇gλ[2:st.m+1,:])'
 end
-function optimize_simple(opt::CCSAState)
+function dual_func!!(λ::AbstractVector{T}, st::CCSAState{T},gλ,∇gλ) where {T}
+    λ_all = CatView([one(T)], λ)
+    st.a .= dot(st.ρ, λ_all) ./ (2 .* (st.σ).^2)
+    mul!(st.b, st.∇fx', λ_all)
+    @. st.Δx = clamp(-st.b / (2 * st.a), -st.σ, st.σ)
+    @. st.Δx = clamp(st.Δx, st.lb-st.x, st.ub-st.x)
+    st.gλ = dot(λ_all, st.fx) + sum((st.a) .* (st.Δx).^2 .+ (st.b) .* (st.Δx))
+    mul!(st.∇gλ, st.∇fx, st.Δx)
+    st.∇gλ .+= st.fx
+    st.∇gλ .+= st.ρ.*sum((st.Δx).^2 ./ (2 .* (st.σ).^2))
+    gλ.=st.gλ
+    ∇gλ.=st.∇gλ
+    return
+end
+function optimize_simple(opt::CCSAState;callback=nothing)
     monotonic=BitVector(undef,opt.n)
     while opt.iters<opt.max_iters
-        opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
+        if opt.f_and_∇f! == opt.f_and_∇f
+            opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
+        else
+            opt.f_and_∇f!(opt.x,f,∇fx)
+        end
         opt.a .= opt.ρ[1]/2 ./ (opt.σ).^2
         opt.b .= opt.∇fx'
         while true
@@ -75,19 +95,31 @@ function optimize_simple(opt::CCSAState)
         if norm(opt.Δx,Inf) < opt.xtol_rel
             break
         end
+        opt.iters+=1
+        if callback!=nothing
+            callback()
+        end
     end
 end
 function inner_iterations(opt::CCSAState)
     max_problem(λ)= begin 
+        println("max_problem called")
         result=dual_func!(λ,opt) 
         -result[1], -result[2]
     end
+    max_problem!(λ,gλ,∇gλ)=begin
+        dual_func!!(λ,opt,gλ,∇gλ)
+        return
+    end 
     g₍ₓ₎=similar(opt.fx)
     conservative=BitVector(undef,opt.m+1)
-    opt_again=CCSAState(opt.m,0,max_problem,zeros(opt.m),lb=zeros(opt.m)) 
+    opt_again=CCSAState(opt.m,0,max_problem,zeros(opt.m),lb=zeros(opt.m) , f_and_∇f!=max_problem!) 
+    test=0
     while true
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
+        println("optimize_dual")
         optimize_simple(opt_again) 
+        println("optimize_dual finished")
         dual_func!(opt_again.x,opt)
         mul!(g₍ₓ₎,opt.∇fx,opt.Δx)
         g₍ₓ₎ .+= opt.fx
@@ -97,12 +129,15 @@ function inner_iterations(opt::CCSAState)
             break
         end
         opt.ρ[.!conservative] *= 2
+        test+=1
+        println(opt.x)
     end
+    println(test)
 end
 
 function optimize(opt::CCSAState;callback=nothing)
     if opt.m==0
-        optimize_simple(opt)
+        optimize_simple(opt,callback=callback)
     end
     monotonic=BitVector(undef,opt.n)
     while opt.iters<opt.max_iters
