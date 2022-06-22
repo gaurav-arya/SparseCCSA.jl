@@ -1,4 +1,4 @@
-mutable struct CCSAState{T<:AbstractFloat}
+mutable struct CCSAState{T <: AbstractFloat}
     n::Integer # number of variables > 0
     m::Integer # number of inequality constraints ≥ 0
     lb::AbstractVector{T} # n lower bounds
@@ -20,48 +20,42 @@ mutable struct CCSAState{T<:AbstractFloat}
     gλ::T # Lagrange dual function value
     ∇gλ::AbstractVector{T} # m Lagrange dual function gradient
     dual::CCSAState{T} # Lagrange dual problem if the primal problem has constraints
-    function CCSAState(
-        n::Integer, # number of variables
-        m::Integer, # number of inequality constraints
-        f_and_∇f::Function,
-        x₀::AbstractVector{T}; # initial feasible point
-        ρ::AbstractVector{T}=ones(T, m + 1), # (m + 1) penality weight ρ
-        σ::AbstractVector{T}=ones(T, n), # n radius of trust region σ
-        lb::AbstractVector{T}=fill(typemin(T), n), # lower bounds, default -Inf
-        ub::AbstractVector{T}=fill(typemax(T), n), # upper bounds, default Inf
-        xtol_rel::T=T(1e-5), # relative tolerence
-        max_iters::Integer=typemax(Int64) # max number of iterations, defalut 2⁶³ - 1
-    ) where {T<:AbstractFloat}
+    function CCSAState(n::Integer, # number of variables
+                       m::Integer, # number of inequality constraints
+                       f_and_∇f::Function,
+                       x₀::AbstractVector{T}; # initial feasible point
+                       ρ::AbstractVector{T} = ones(T, m + 1), # (m + 1) penality weight ρ
+                       σ::AbstractVector{T} = ones(T, n), # n radius of trust region σ
+                       lb::AbstractVector{T} = fill(typemin(T), n), # lower bounds, default -Inf
+                       ub::AbstractVector{T} = fill(typemax(T), n), # upper bounds, default Inf
+                       xtol_rel::T = T(1e-5), # relative tolerence
+                       max_iters::Integer = typemax(Int64)) where {T <: AbstractFloat}
         fx, ∇fx = f_and_∇f(x₀)
-        opt = new{T}(
-            n,
-            m,
-            lb,
-            ub,
-            f_and_∇f,
-            ρ,
-            σ,
-            x₀,
-            xtol_rel,
-            max_iters,
-            zero(max_iters),
-            fx,
-            ∇fx,
-            Vector{T}(undef, n),
-            Vector{T}(undef, n),
-            Vector{T}(undef, n),
-            Vector{T}(undef, n),
-            T(0),
-            Vector{T}(undef, m + 1)
-        )
+        opt = new{T}(n,
+                     m,
+                     lb,
+                     ub,
+                     f_and_∇f,
+                     ρ,
+                     σ,
+                     x₀,
+                     xtol_rel,
+                     max_iters,
+                     zero(max_iters),
+                     fx,
+                     ∇fx,
+                     Vector{T}(undef, n),
+                     Vector{T}(undef, n),
+                     Vector{T}(undef, n),
+                     Vector{T}(undef, n),
+                     T(0),
+                     Vector{T}(undef, m + 1))
         if opt.m > 0
-            opt.dual = CCSAState( # Lagrange dual problem
-                opt.m, # number of Lagrange multipliers
-                0, # no inequality constraints
-                λ -> (T[], T[]),
-                ones(T, opt.m), # initial feasible point for Lagrange multipliers
-                lb=zeros(T, opt.m) # Lagrange multipliers ≥ 0 for inequality constraints
-            )
+            opt.dual = CCSAState(opt.m, # number of Lagrange multipliers
+                                 0, # no inequality constraints
+                                 λ -> (T[], T[]),
+                                 ones(T, opt.m), # initial feasible point for Lagrange multipliers
+                                 lb = zeros(T, opt.m))
         end
         return opt
     end
@@ -71,7 +65,7 @@ function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
     λ_all = CatView([one(T)], λ)
     st.a .= dot(st.ρ, λ_all) ./ (2 .* st.σ .^ 2)
     mul!(st.b, st.∇fx', λ_all)
-    for j in 1:st.n
+    for j in 1:(st.n)
         st.Δx[j] = clamp(-st.b[j] / (2 * st.a[j]), -st.σ[j], st.σ[j])
         st.Δx[j] = clamp(st.Δx[j], st.lb[j] - st.x[j], st.ub[j] - st.x[j])
     end
@@ -136,7 +130,7 @@ function inner_iterations(opt::CCSAState{T}) where {T}
     end
 end
 
-function optimize(opt::CCSAState{T}; callback=nothing) where {T}
+function optimize(opt::CCSAState{T}; callback = nothing) where {T}
     if opt.m == 0
         return optimize_simple(opt)
     end
