@@ -6,6 +6,7 @@
 ## Tutorial
 
 The following example code solves the nonlinearly constrained minimization problem
+
 $$
 \begin{align*} 
     \operatorname*{minimize}_{x\in\mathbb{R}\times\mathbb{R}\times[5,15]}\quad&x_1^2+x_2^2+x_3^2\\
