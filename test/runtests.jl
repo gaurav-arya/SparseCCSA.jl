@@ -26,15 +26,16 @@ using SparseArrays
         @test opt₁.lb == fill(typemin(T), nvar)
         @test opt₁.ub == fill(typemax(T), nvar)
         @test opt₁.xtol_rel == T(1e-5)
-        opt₂ = CCSAState(nvar, ncon, f_and_∇f, x₀, ρ=ρ, σ=σ, lb=lower_bound)
+        opt₂ = CCSAState(nvar, ncon, f_and_∇f, x₀, ρ = ρ, σ = σ, lb = lower_bound)
         @test opt₂.lb == lower_bound
         @test opt₂.ub == fill(typemax(T), nvar)
         @test opt₂.xtol_rel == T(1e-5)
-        opt₃ = CCSAState(nvar, ncon, f_and_∇f, x₀, ρ=ρ, σ=σ, lb=lower_bound, ub=upper_bound)
+        opt₃ = CCSAState(nvar, ncon, f_and_∇f, x₀, ρ = ρ, σ = σ, lb = lower_bound,
+                         ub = upper_bound)
         @test opt₃.lb == lower_bound
         @test opt₃.ub == upper_bound
         @test opt₃.xtol_rel == T(1e-5)
-        opt₄ = CCSAState(nvar, ncon, f_and_∇f, x₀, ρ=ρ, σ=σ, xtol_rel=xtol_rel)
+        opt₄ = CCSAState(nvar, ncon, f_and_∇f, x₀, ρ = ρ, σ = σ, xtol_rel = xtol_rel)
         @test opt₄.lb == fill(typemin(T), nvar)
         @test opt₄.ub == fill(typemax(T), nvar)
         @test opt₄.xtol_rel == xtol_rel
@@ -53,7 +54,7 @@ end
     ρ = ones(nvar + 1)
     σ = ones(ncon)
     x₀ = zeros(nvar)
-    sparse_opt = CCSAState(nvar, ncon, f_and_∇f, x₀, ρ=ρ, σ=σ)
+    sparse_opt = CCSAState(nvar, ncon, f_and_∇f, x₀, ρ = ρ, σ = σ)
     # Dense Jacobian should not be allocated if sparsity is provided
     @test typeof(sparse_opt.∇fx) <: AbstractSparseMatrix
 end
@@ -72,12 +73,12 @@ end
         x = [-10.0]
         lb = [-100.0]
         ub = [100.0]
-        opt = CCSAState(n, m, f_and_∇f, x, ρ=ρ, σ=σ, lb=lb, ub=ub)
+        opt = CCSAState(n, m, f_and_∇f, x, ρ = ρ, σ = σ, lb = lb, ub = ub)
         optimize(opt)
         return opt.x
     end
-    @test test1(-1.0) ≈ [-1.0] atol = 1e-5
-    @test test1(1.0) ≈ [0.0] atol = 1e-5
+    @test test1(-1.0)≈[-1.0] atol=1e-5
+    @test test1(1.0)≈[0.0] atol=1e-5
 
     function test2()
         function f_and_grad(x)
@@ -93,7 +94,8 @@ end
         ub = [100.0, 100.0]
         x = [0.0, 0.0]
         xtol_rel = 1e-6
-        st = CCSAState(n, m, f_and_grad, x, ρ=ρ, σ=σ, lb=lb, ub=ub, xtol_rel=xtol_rel)
+        st = CCSAState(n, m, f_and_grad, x, ρ = ρ, σ = σ, lb = lb, ub = ub,
+                       xtol_rel = xtol_rel)
         optimize(st)
         return st.x
     end
@@ -117,9 +119,9 @@ end
         ρ0 = [101.0] # m + 1
         σ0 = fill(0.1, n) # n
         x0 = fill(50.0, n) # n
-        st = CCSAState(n, m, f_and_∇f, x0, ρ=ρ0, σ=σ0)
+        st = CCSAState(n, m, f_and_∇f, x0, ρ = ρ0, σ = σ0)
         optimize(st)
         return st.x
     end
-    @test fundamental_no_constraints_test(6) ≈ fill(0.0, 6) atol = 1e-4
+    @test fundamental_no_constraints_test(6)≈fill(0.0, 6) atol=1e-4
 end

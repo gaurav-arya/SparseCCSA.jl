@@ -1,8 +1,18 @@
 # SparseCCSA
+[![Github Action CI](https://github.com/gaurav-arya/SparseCCSA.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/gaurav-arya/SparseCCSA.jl/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/gaurav-arya/SparseCCSA.jl/graph/badge.svg)](https://codecov.io/gh/gaurav-arya/SparseCCSA.jl)
+[![SciML Code Style](https://img.shields.io/static/v1?label=code%20style&message=SciML&color=9558b2&labelColor=389826)](https://github.com/SciML/SciMLStyle)
+
 ## Tutorial
 
 The following example code solves the nonlinearly constrained minimization problem
-<img src="https://latex.codecogs.com/svg.latex?\min_{x\in\mathbb{R}\times\mathbb{R}\times[5,15]}\quad%20x_1^2+x_2^2+x_3^2\quad\textrm{s.t.%20}x_1\leq-1">
+
+$$
+\begin{align*} 
+    \operatorname*{minimize}_{x\in\mathbb{R}\times\mathbb{R}\times[5,15]}\quad&x_1^2+x_2^2+x_3^2\\
+    \textrm{subject to}\quad&x_1\leq-1
+\end{align*}
+$$
 
 ```julia
 using SparseCCSA
