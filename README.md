@@ -1,4 +1,7 @@
 # SparseCCSA
+[![Github Action CI](https://github.com/gaurav-arya/SparseCCSA.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/gaurav-arya/SparseCCSA.jl/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/gaurav-arya/SparseCCSA.jl/graph/badge.svg)](https://codecov.io/gh/gaurav-arya/SparseCCSA.jl)
+
 ## Tutorial
 
 The following example code solves the nonlinearly constrained minimization problem
