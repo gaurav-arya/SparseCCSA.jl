@@ -151,5 +151,5 @@ function optimize(opt::CCSAState{T}; callback = nothing) where {T}
             callback()
         end
     end
-    return iters
+    return opt.iters
 end
