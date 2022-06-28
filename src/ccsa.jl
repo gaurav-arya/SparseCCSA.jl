@@ -81,7 +81,7 @@ function optimize_simple(opt::CCSAState{T}) where {T}
     while opt.iters < opt.max_iters
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
         opt.a .= opt.ρ[1] / 2 ./ (opt.σ) .^ 2
-        opt.b .= opt.∇fx'
+        opt.b .= opt.∇fx[:]
         while true
             @. opt.Δx = clamp(-opt.b / (2 * opt.a), -opt.σ, opt.σ)
             @. opt.Δx = clamp(opt.Δx, opt.lb - opt.x, opt.ub - opt.x)
