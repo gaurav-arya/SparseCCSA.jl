@@ -82,7 +82,7 @@ function optimize_simple(opt::CCSAState{T}) where {T}
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
         opt.a .= opt.ρ[1] / 2 ./ (opt.σ) .^ 2
         opt.b .= opt.∇fx[:]
-        while true
+        for i in 1:10
             @. opt.Δx = clamp(-opt.b / (2 * opt.a), -opt.σ, opt.σ)
             @. opt.Δx = clamp(opt.Δx, opt.lb - opt.x, opt.ub - opt.x)
             opt.gλ = opt.fx[1] + sum(@. opt.a * opt.Δx^2 + opt.b * opt.Δx)
@@ -107,7 +107,8 @@ end
 function inner_iterations(opt::CCSAState{T}) where {T}
     gᵢxᵏ⁺¹ = Vector{T}(undef, opt.m + 1)
     conservative = BitVector(undef, opt.m + 1)
-    while true
+    # arbitrary upper bound on inner iterations
+    for i in 1:10
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
         opt.dual.f_and_∇f = function (λ) # negative Lagrange dual function and gradient
             gλ, ∇gλ = dual_func!(λ, opt)
