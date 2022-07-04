@@ -78,7 +78,8 @@ end
 # optimize problem with no constraint
 function optimize_simple(opt::CCSAState{T}) where {T}
     monotonic = BitVector(undef, opt.n)
-    while opt.iters < opt.max_iters
+    while opt.iters < 10#opt.max_iters
+        println("hi")
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
         opt.a .= opt.ρ[1] / 2 ./ (opt.σ) .^ 2
         opt.b .= opt.∇fx[:]
@@ -109,7 +110,10 @@ function inner_iterations(opt::CCSAState{T}) where {T}
     conservative = BitVector(undef, opt.m + 1)
     # arbitrary upper bound on inner iterations
     for i in 1:10
-        opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
+        opt.fx, opt.∇fx = opt.f_and_∇f(opt.x) # expect this line to take up the most time. |Ax - b|^2 + λ |x|₁ <- x is length n, and there are n constraints.
+    
+        # normally doing A * x takes a lot longer than n time.
+
         opt.dual.f_and_∇f = function (λ) # negative Lagrange dual function and gradient
             gλ, ∇gλ = dual_func!(λ, opt)
             -gλ, -∇gλ # minus signs used to change max problem to min problem
