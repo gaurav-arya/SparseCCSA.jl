@@ -3,8 +3,8 @@ using LinearAlgebra
 using CatViews
 using BenchmarkTools
 using Profile
-using ProfileView
-using PProf
+#using ProfileView
+#using PProf
 using SparseArrays
 using BenchmarkTools
 ncon = 0
