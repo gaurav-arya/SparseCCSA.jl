@@ -94,7 +94,7 @@ end
 # optimize problem with no constraint
 function optimize_simple(opt::CCSAState{T}) where {T}
     monotonic = BitVector(undef, opt.n)
-    while opt.iters < 10#opt.max_iters
+    while opt.iters < opt.max_iters
         opt.fx, opt.∇fx = opt.f_and_∇f(opt.x)
         opt.a .= opt.ρ[1] / 2 ./ (opt.σ) .^ 2
         opt.b .= opt.∇fx[:]
