@@ -1,10 +1,10 @@
 using SparseCCSA
-using SparseCCSA: inner_iterations
 using Test
 using LinearAlgebra
 using SparseArrays
 
-@testset "constructor" begin
+##### Test the constructor #####
+@testset "Constructor" begin
     nvar = 30
     ncon = 40
     function test_constructor(T::DataType)
@@ -45,7 +45,8 @@ using SparseArrays
     test_constructor(Float64)
 end
 
-@testset "sparse Jacobian constuctor" begin
+##### Test sparse matrix #####
+@testset "Sparse Jacobian" begin
     nvar = 100
     ncon = 200
     function f_and_∇f(x)
@@ -59,52 +60,9 @@ end
     @test typeof(sparse_opt.∇fx) <: AbstractSparseMatrix
 end
 
-@testset "integration" begin
-    function test1(bound)
-        function f_and_∇f(x)
-            f = [abs2(x[1]), x[1] - bound]
-            ∇f = [2x[1]; 1.0]
-            return f, ∇f
-        end
-        n = 1
-        m = 1
-        σ = [30.0] # n
-        ρ = [2.0, 0.0001] * σ[1]^2 # m + 1
-        x = [-10.0]
-        lb = [-100.0]
-        ub = [100.0]
-        opt = CCSAState(n, m, f_and_∇f, x, ρ = ρ, σ = σ, lb = lb, ub = ub)
-        optimize(opt)
-        return opt.x
-    end
-    @test test1(-1.0)≈[-1.0] atol=1e-5
-    @test test1(1.0)≈[0.0] atol=1e-5
-
-    function test2()
-        function f_and_grad(x)
-            fx = [x[1]^2 * x[2], x[1] - 3, x[1] + 4, x[2] - 4]
-            gradx = [2*x[1]*x[2] x[1]^2; 1 0; 1 0; 0 1]
-            fx, gradx
-        end
-        n = 2
-        m = 3
-        ρ = [1000.0, 1000.0, 1000.0, 1000.0] #m+1
-        σ = [100.0, 100.0] #n
-        lb = [-100.0, -100.0]
-        ub = [100.0, 100.0]
-        x = [0.0, 0.0]
-        xtol_rel = 1e-6
-        st = CCSAState(n, m, f_and_grad, x, ρ = ρ, σ = σ, lb = lb, ub = ub,
-                       xtol_rel = xtol_rel)
-        optimize(st)
-        return st.x
-    end
-    @test norm(test1(-1) - [-1.0]) < 0.001 # the constraint is tight
-    @test norm(test1(1) - [0.0]) < 0.001 # the constraint is tight
-    @test norm(test2() - [-100.0, -100.0]) < 1.0 # the box constraint is tight
-end
-
-@testset "no constraint" begin
+##### No constraint #####
+@testset "No constraint" begin
+    ##### min x₁²+x₂²+x₃²+x₄²+... ##### 
     function fundamental_no_constraints_test(n)
         function f(x)
             return [sum(abs2, x)]
@@ -124,4 +82,56 @@ end
         return st.x
     end
     @test fundamental_no_constraints_test(6)≈fill(0.0, 6) atol=1e-4
+end
+
+##### Test a toy problem #####
+@testset "test 1" begin
+    function test1(bound)
+        function f_and_∇f(x)
+            f = [abs2(x[1]), x[1] - bound]
+            ∇f = [2x[1]; 1.0]
+            return f, ∇f
+        end
+        n = 1
+        m = 1
+        σ = [30.0] # n
+        ρ = [2.0, 0.0001] * σ[1]^2 # m + 1
+        x = [-10.0]
+        lb = [-100.0]
+        ub = [100.0]
+        opt = CCSAState(n, m, f_and_∇f, x, ρ = ρ, σ = σ, lb = lb, ub = ub)
+        optimize(opt)
+        return opt.x
+    end
+    @test test1(-1.0)≈[-1.0] atol=1e-5
+    @test test1(1.0)≈[0.0] atol=1e-5
+    @test norm(test1(-1) - [-1.0]) < 0.001 # the constraint is tight
+    @test norm(test1(1) - [0.0]) < 0.001 # the constraint is tight
+end
+
+@testset "test 2" begin
+    function test2()
+        ##### min  x₁²x₂ #####
+        ##### s.t. x₁ - 3 < 0 #####
+        ##### s.t. x₁ + 4 < 0 #####
+        ##### s.t. x₂ - 4 < 0 #####
+        function f_and_grad(x)
+            fx = [x[1]^2 * x[2], x[1] - 3, x[1] + 4, x[2] - 4]
+            gradx = [2*x[1]*x[2] x[1]^2; 1 0; 1 0; 0 1]
+            fx, gradx
+        end
+        n = 2
+        m = 3
+        ρ = [1000.0, 1000.0, 1000.0, 1000.0] #m+1
+        σ = [100.0, 100.0] #n
+        lb = [-100.0, -100.0]
+        ub = [100.0, 100.0]
+        x = [-10.0, -10.0]
+        xtol_rel = 1e-6
+        st = CCSAState(n, m, f_and_grad, x, ρ = ρ, σ = σ, lb = lb, ub = ub,
+                       xtol_rel = xtol_rel)
+        optimize(st)
+        return st.x
+    end
+    @test norm(test2() - [-100.0, -100.0]) < 1.0 # the box constraint is tight
 end

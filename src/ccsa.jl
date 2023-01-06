@@ -30,6 +30,7 @@ mutable struct CCSAState{T <: AbstractFloat}
                        m::Integer, # number of inequality constraints
                        f_and_∇f::Function,
                        x₀::AbstractVector{T}; # initial feasible point
+                       # parameters below are optional
                        ρ::AbstractVector{T} = ones(T, m + 1), # (m + 1) penality weight ρ
                        σ::AbstractVector{T} = ones(T, n), # n radius of trust region σ
                        lb::AbstractVector{T} = fill(typemin(T), n), # lower bounds, default -Inf
@@ -147,6 +148,12 @@ function inner_iterate(opt::CCSAState{T}) where {T}
 end
 
 function optimize(opt::CCSAState{T}; callback = nothing) where {T}
+    if opt.f_and_∇f(opt.x)[1][2:end] <= zero(opt.x)
+        nothing
+    else
+        print("x₀ is not feasible.")
+        return 
+    end
     if opt.m == 0
         return optimize_simple(opt)
     end
