@@ -1,48 +1,48 @@
-mutable struct CCSAState{T <: AbstractFloat}
-    n::Integer # number of variables > 0
-    m::Integer # number of inequality constraints ≥ 0
-    lb::AbstractVector{T} # n lower bounds
-    ub::AbstractVector{T} # n upper bounds
-    f_and_∇f::Function # f(x) = (m+1, (m+1) x n linear operator)
-    ρ::AbstractVector{T} # m + 1 penality weight
-    σ::AbstractVector{T} # n radius of trust region
-    x::AbstractVector{T} # current best feasible point
+mutable struct CCSAState{T <: AbstractFloat, F, L}
+    n::Int # number of variables > 0
+    m::Int # number of inequality constraints ≥ 0
+    lb::Vector{T} # n lower bounds
+    ub::Vector{T} # n upper bounds
+    f_and_∇f::F # f(x) = (m+1, (m+1) x n linear operator)
+    ρ::Vector{T} # m + 1 penality weight
+    σ::Vector{T} # n radius of trust region
+    x::Vector{T} # current best feasible point
     xtol_rel::T # relative tolerence
     xtol_abs::T # absolute tolerence
     ftol_rel::T # relative tolerence
     ftol_abs::T # absolute tolerence
-    max_iters::Integer # max number of iterations
-    iters::Integer # interation count
+    max_iters::Int # max number of iterations
+    iters::Int # interation count
 
-    fx::AbstractVector{T} # (m+1) x 1 function values at x
-    ∇fx::AbstractVecOrMat{T} # (m+1) x n linear operator of Jacobian at x
-    a::AbstractVector{T} # n
-    b::AbstractVector{T} # n
-    Δx::AbstractVector{T} # n xᵏ⁺¹ - xᵏ
-    Δx_last::AbstractVector{T} # n xᵏ - xᵏ⁻¹
+    fx::Vector{T} # (m+1) x 1 function values at x
+    ∇fx::L # (m+1) x n linear operator of Jacobian at x
+    a::Vector{T} # n
+    b::Vector{T} # n
+    Δx::Vector{T} # n xᵏ⁺¹ - xᵏ
+    Δx_last::Vector{T} # n xᵏ - xᵏ⁻¹
     gλ::T # Lagrange dual function value
-    ∇gλ::AbstractVector{T} # m Lagrange dual function gradient
+    ∇gλ::Vector{T} # m Lagrange dual function gradient
     RET::Symbol
-    fx_last::AbstractVector{T}
+    fx_last::Vector{T}
     dual::CCSAState{T} # Lagrange dual problem if the primal problem has constraints
 
-    function CCSAState(n::Integer, # number of variables
-                       m::Integer, # number of inequality constraints
-                       f_and_∇f::Function,
-                       x₀::AbstractVector{T}; # initial feasible point
+    function CCSAState(n::Int, # number of variables
+                       m::Int, # number of inequality constraints
+                       f_and_∇f::F,
+                       x₀::Vector{T}; # initial feasible point
                        # parameters below are optional
-                       ρ::AbstractVector{T} = ones(T, m + 1), # (m + 1) penality weight ρ
-                       σ::AbstractVector{T} = ones(T, n), # n radius of trust region σ
-                       lb::AbstractVector{T} = fill(typemin(T), n), # lower bounds, default -Inf
-                       ub::AbstractVector{T} = fill(typemax(T), n), # upper bounds, default Inf
+                       ρ::Vector{T} = ones(T, m + 1), # (m + 1) penality weight ρ
+                       σ::Vector{T} = ones(T, n), # n radius of trust region σ
+                       lb::Vector{T} = fill(typemin(T), n), # lower bounds, default -Inf
+                       ub::Vector{T} = fill(typemax(T), n), # upper bounds, default Inf
                        xtol_rel::T = T(1e-5), # relative tolerence
                        xtol_abs::T = T(1e-5), # relative tolerence
                        ftol_rel::T = T(1e-5), # relative tolerence
                        ftol_abs::T = T(1e-5), # relative tolerence
-                       max_iters::Integer = typemax(Int64)
-                       ) where {T <: AbstractFloat}
+                       max_iters::Int = typemax(Int64)
+                       ) where {F, T <: AbstractFloat}
         fx, ∇fx = f_and_∇f(x₀)
-        opt = new{T}(n,
+        opt = new{T,F,typeof(∇fx)}(n,
                      m,
                      lb,
                      ub,
@@ -78,7 +78,7 @@ mutable struct CCSAState{T <: AbstractFloat}
     end
 end
 # Returns the dual function g(λ) and ∇g(λ)
-function dual_func!(λ::AbstractVector{T}, st::CCSAState{T}) where {T}
+function dual_func!(λ::Vector{T}, st::CCSAState{T}) where {T}
     λ_all = CatView([one(T)], λ)
     st.a .= dot(st.ρ, λ_all) ./ (2 .* st.σ .^ 2)
     mul!(st.b, st.∇fx', λ_all)
