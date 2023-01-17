@@ -55,12 +55,13 @@ function solve_problem(state, n)
     recode_xi_stable=Array{Float64}(undef,2n,100)
 
     function cb()
-        value[state.iters]=opt.fx[1]
+        value[state.iters]=state.fx[1]
         println(state.iters)
-        recode_xi_stable[:,state.iters].=opt.x
+        recode_xi_stable[:,state.iters].=state.x
     end
 
-    optimize(opt,callback=cb) 
+    @show typeof(state)
+    optimize(state,callback=cb) 
 end
 
 opt = solve_problem(state, n)
