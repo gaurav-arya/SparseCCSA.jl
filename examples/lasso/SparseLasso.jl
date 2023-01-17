@@ -8,7 +8,6 @@ function make_problem(α, n)
     A=sparse(Matrix(SymTridiagonal(2*ones(n),ones(n))))
     x_true= ones(n)*10; x_true.= sprand(n,0.1)*10
     y=A*x_true
-    @btime mul!(y,A,x_true)
     I=Vector{Int64}(undef,6n)
     J=Vector{Int64}(undef,6n)
     V=Vector{Float64}(undef,6n)
@@ -51,20 +50,20 @@ end
 n= 100
 state = make_problem(α, n)
 
-function solve_problem(opt, n)
+function solve_problem(state, n)
     value=Array{Float64}(undef,1000)
     recode_xi_stable=Array{Float64}(undef,2n,100)
 
     function cb()
-        value[opt.iters]=opt.fx[1]
-        println(opt.iters)
-        recode_xi_stable[:,opt.iters].=opt.x
+        value[state.iters]=opt.fx[1]
+        println(state.iters)
+        recode_xi_stable[:,state.iters].=opt.x
     end
 
     optimize(opt,callback=cb) 
 end
 
-opt = solve_problem(opt, n)
+opt = solve_problem(state, n)
 
 using Plots
 plot(1:opt.iters,value[1:opt.iters],yscale=:log10,ylim=[100,1e3])

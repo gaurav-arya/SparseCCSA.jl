@@ -147,7 +147,7 @@ function inner_iterate(opt::CCSAState{T}) where {T}
     opt.dual.x .= one(T) # reinitialize starting point of Lagrange multipliers
 end
 
-function optimize(opt::CCSAState{T}; callback = nothing) where {T}
+function optimize(opt::CCSAState; callback = nothing)
     if opt.f_and_∇f(opt.x)[1][2:end] <= zero(opt.x)
         nothing
     else
