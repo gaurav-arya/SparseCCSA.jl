@@ -3,6 +3,9 @@ using Test
 using LinearAlgebra
 using SparseArrays
 
+@testset "Dual problem" begin
+end
+
 ##### Test the constructor #####
 @testset "Constructor" begin
     nvar = 30

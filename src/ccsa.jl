@@ -1,3 +1,61 @@
+"""
+An unambiguous specification of the dual problem.
+"""
+struct DualSpecification{T,L}
+    m::Int # number of variables
+    x::Vector{T} # n x 1 primal iterate 
+    fx::Vector{T} # (m+1) x 1 values of objective+constraints of primal
+    ∇fx::L # (m+1) x n Jacobian linear operator at x
+    ρ::Vector{T} # (m+1) x 1 penality weight of primal
+    σ::Vector{T} # n x 1 axes lengths of trust region
+    lb::Vector{T} # n x 1 lower bounds on primal solution
+    ub::Vector{T} # n x 1 upper bounds on primal solution
+end
+
+"""
+Mutable buffers used by the dual optimization algorithm.
+"""
+struct DualBuffers{T}
+    a::Vector{T} # n x 1 buffer
+    b::Vector{T} # n x 1 buffer
+    δ::Vector{T} # n x 1 buffer
+end
+
+"""
+A callable structure for evaluating the dual function and its gradient.
+"""
+struct DualEvaluator{T, L}
+    spec::DualSpecification{T, L}
+    buffers::DualBuffers{T} 
+end
+
+"""
+    (evaluator::DualEvaluator{T})(∇gλ, λ)
+
+Return the dual objective gλ at λ and mutate 
+the dual gradient ∇gλ in-place to its new value.
+"""
+function (evaluator::DualEvaluator{T})(∇gλ, λ) where {T}
+    @unpack σ, ρ, fx, ∇fx, lb, ub = evaluator.spec 
+    @unpack a, b, δ = evaluator.buffers
+    λ_all = CatView([one(T)], λ)
+
+    @. a = dot(λ_all, ρ) / (2 * σ ^ 2)
+    mul!(b, ∇fx', λ_all)
+    @. δ = clamp(-b / (2 * a), -σ, σ)
+    @. δ = clamp(δ, lb - p.x, ub - x)
+    gλ = dot(λ_all, fx) + sum(@. a * δ^2 + b * δ)
+    mul!(∇gλ, ∇fx, δ)
+    @. ∇gλ += fx + sum(abs2, δ / σ) / 2 * ρ
+    return gλ
+end
+
+
+opt.dual.f_and_∇f = function (λ) # negative Lagrange dual function and gradient
+    gλ, ∇gλ = dual_func!(λ, opt)
+    -gλ, -∇gλ # minus signs used to change max problem to min problem
+end
+
 mutable struct CCSAState{T <: AbstractFloat, F, L}
     n::Int # number of variables > 0
     m::Int # number of inequality constraints ≥ 0
@@ -25,6 +83,7 @@ mutable struct CCSAState{T <: AbstractFloat, F, L}
     RET::Symbol
     fx_last::Vector{T}
     dual::CCSAState{T} # Lagrange dual problem if the primal problem has constraints
+    
 
     function CCSAState(n::Int, # number of variables
                        m::Int, # number of inequality constraints
@@ -77,20 +136,6 @@ mutable struct CCSAState{T <: AbstractFloat, F, L}
         return opt
     end
 end
-# Returns the dual function g(λ) and ∇g(λ)
-function dual_func!(λ::Vector{T}, st::CCSAState{T}) where {T}
-    λ_all = CatView([one(T)], λ)
-    st.a .= dot(st.ρ, λ_all) ./ (2 .* st.σ .^ 2)
-    mul!(st.b, st.∇fx', λ_all)
-    for j in 1:(st.n)
-        st.Δx[j] = clamp(-st.b[j] / (2 * st.a[j]), -st.σ[j], st.σ[j])
-        st.Δx[j] = clamp(st.Δx[j], st.lb[j] - st.x[j], st.ub[j] - st.x[j])
-    end
-    st.gλ = dot(λ_all, st.fx) + sum(@. st.a * st.Δx^2 + st.b * st.Δx)
-    st.∇gλ .= st.fx .+ sum(abs2, st.Δx ./ st.σ) / 2 .* st.ρ
-    mul!(st.∇gλ, st.∇fx, st.Δx, true, true)
-    return [st.gλ], (@view st.∇gλ[2:end, :])'
-end
 
 # optimize problem with no constraint
 function optimize_simple(opt::CCSAState{T}) where {T}
@@ -121,12 +166,26 @@ function optimize_simple(opt::CCSAState{T}) where {T}
     end
 end
 
+"""
+    inner_iterate(opt::CCSAState)
+
+Given optimization state opt, evaluate objective and
+Jacobian at current x. These can be used to form the dual problem
+objective and its gradient (as functions of the dual soln λ).
+
+...
+Find new candidate point.
+
+Check if conservative at new candidate point (objective + constraints)
+all underestimated. If so, return.
+"""
 function inner_iterate(opt::CCSAState{T}) where {T}
     gᵢxᵏ⁺¹ = Vector{T}(undef, opt.m + 1)
     conservative = BitVector(undef, opt.m + 1)
     # arbitrary upper bound on inner iterations
     opt.fx, opt.∇fx = opt.f_and_∇f(opt.x) # expect this line to take up the most time. |Ax - b|^2 + λ |x|₁ <- x is length n, and there are n constraints.
     # normally doing A * x takes a lot longer than n time.
+    # TODO: below function should be a callable struct
     opt.dual.f_and_∇f = function (λ) # negative Lagrange dual function and gradient
         gλ, ∇gλ = dual_func!(λ, opt)
         -gλ, -∇gλ # minus signs used to change max problem to min problem
@@ -147,6 +206,18 @@ function inner_iterate(opt::CCSAState{T}) where {T}
     opt.dual.x .= one(T) # reinitialize starting point of Lagrange multipliers
 end
 
+function step!(opt::CCSAState)
+end
+
+"""
+    optimize(opt::CCSAState; callback = nothing)
+
+Optimize the mutable optization state opt. 
+We assume that opt.fx and opt.∇fx are prepopulated 
+with their values at the initial point x.
+
+The final solution can be found in opt.x, and retcode in opt.RET.
+"""
 function optimize(opt::CCSAState; callback = nothing)
     if opt.f_and_∇f(opt.x)[1][2:end] <= zero(opt.x)
         nothing
@@ -154,20 +225,34 @@ function optimize(opt::CCSAState; callback = nothing)
         print("x₀ is not feasible.")
         return 
     end
+
+    # Special case when there are no constraints
     if opt.m == 0
         return optimize_simple(opt)
     end
+    # is monotonic or oscillating? TODO: this should be part of state. 
     monotonic = BitVector(undef, opt.n)
+    #= 
+    Perform outer iterations.
+    Summary:
+
+    =#
     while true
+        # TODO: why 10 inner iterations here?
         for i in 1:10
             inner_iterate(opt)
         end
-        f = opt.fx[1]
-        Δf = opt.f_and_∇f(opt.x+opt.Δx)[1][1] - f
+        f = opt.fx[1] # Get current value of objective function
+        Δf = opt.f_and_∇f(opt.x+opt.Δx)[1][1] - f # Get change in opt val..? 
+                                                  # TODO: is x + Δx what we want/
         if opt.iters > opt.max_iters
             opt.RET = :MAX_ITERS
             return
         end
+        #= 
+        Check for xtol and ftol (abs and rel), all using infinity norm.
+        TODO: is infinity norm correct here?
+        =#
         if norm(opt.Δx, Inf) < opt.xtol_abs
             opt.RET = :XTOL_ABS
             return
