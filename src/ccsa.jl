@@ -153,7 +153,7 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         mul!(iterate.gx, iterate.∇fx, δ, true, true)
 
         f_and_∇f(iterate.fx, iterate.∇fx, iterate.x + δ)
-        conservative = Iterators.map(>, iterate.gx, iterate.fx)
+        conservative = Iterators.map(>=, iterate.gx, iterate.fx)
         dual_iterate.ρ .= one(T) # reinitialize penality weights
         dual_iterate.σ .= one(T) # reinitialize radii of trust region
         dual_iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
@@ -161,8 +161,10 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         all(conservative) && break
         iterate.ρ[.!conservative] *= 2 # increase ρ until achieving conservative approximation
         if i == max_inner_iters
-            is_primal && "could not find conservative approx for primal"
-            is_dual && "could not find conservative approx for dual"
+            is_primal && println("could not find conservative approx for primal")
+            if is_dual
+                @info "could not find conservative approx for dual" norm(δ) norm(iterate.ρ)
+            end
         end
     end
     
