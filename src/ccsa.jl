@@ -101,7 +101,7 @@ function init(f_and_∇f, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iter
 
     # Setup dual dual iterate, with 0 variables and 0 constraints
     dual_dual_evaluator = DualEvaluator(dual_iterate, DualBuffers(zeros(T, m), zeros(T, m), zeros(T, m)))
-    dual_dual_iterate = Iterate(T[], [zero(T)], zeros(T, 1, 1), [zero(T)], T[], T[], T[], T[], T[], [zero(T)])
+    dual_dual_iterate = Iterate(T[], [zero(T)], zeros(T, 1, 1), [one(T)], T[], T[], T[], T[], T[], [zero(T)])
 
     # Setup optimizers
     dual_dual_optimizer = CCSAOptimizer(dual_dual_evaluator, dual_dual_iterate, nothing, 5, 0)
