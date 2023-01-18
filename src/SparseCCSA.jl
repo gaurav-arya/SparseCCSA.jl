@@ -4,8 +4,7 @@ using CatViews
 using LinearAlgebra
 using UnPack
 
-export CCSAState
-export optimize
+export init, solve!
 
 include("ccsa.jl")
 
