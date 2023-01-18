@@ -47,7 +47,7 @@ function (evaluator::DualEvaluator{T})(gλ, ∇gλ, λ) where {T}
     λ_all = CatView([one(T)], λ)
     ∇gλ_all = CatView([one(T)], λ)
 
-    @info "In evaluator" size(a) size(b) size(∇fx) size(λ_all) size(∇gλ) size(δ) size(fx) size(σ)
+    # @info "In evaluator" size(a) size(b) size(∇fx) size(λ_all) size(∇gλ) size(δ) size(fx) size(σ)
     a .= 1 / dot(λ_all, ρ) .* (2 .* σ .^ 2)
     mul!(b, ∇fx', λ_all)
     @. δ = clamp(-b / (2 * a), -σ, σ)
@@ -86,10 +86,11 @@ Return a CCSAOptimizer that can be step!'d.
 Free to allocate here.
 """
 function init(f_and_∇f, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters, max_dual_iters, max_dual_inner_iters, ∇fx_prototype) where {T}
-    x0 === nothing && (x0 = zeros(n))
+    x0 = (x0 === nothing) ? zeros(n) : copy(x0)
+    ∇fx = copy(∇fx_prototype)
 
     # Setup primal iterate, with n variables and m constraints
-    iterate = Iterate(x0, zeros(T, m+1), ∇fx_prototype, ones(T, m+1), ones(T, n), 
+    iterate = Iterate(x0, zeros(T, m+1), ∇fx, ones(T, m+1), ones(T, n), 
                       lb, ub, zeros(T, n), zeros(T, n), zeros(T, m+1))
 
     # Setup dual iterate, with m variables and 0 constraints
@@ -108,9 +109,7 @@ function init(f_and_∇f, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iter
     optimizer = CCSAOptimizer(f_and_∇f, iterate, dual_optimizer, max_iters, max_inner_iters)
 
     # Initialize objective and gradient (TODO: should this move into step! ?)
-    f_and_∇f(iterate.fx, iterate.∇fx, x0)
-    # Check feasibility
-    any((@view iterate.fx[2:end]) .> 0) && return Solution(x0, :INFEASIBLE)
+    f_and_∇f(iterate.fx, iterate.∇fx, iterate.x)
 
     return optimizer 
 end
@@ -123,6 +122,16 @@ Perform one CCSA iteration.
 function step!(optimizer::CCSAOptimizer{T}) where {T}
     @unpack f_and_∇f, iterate, dual_optimizer, max_inner_iters = optimizer
     iterate.Δx_last .= iterate.Δx
+
+    is_primal = length(iterate.x) == 80 && !(f_and_∇f isa DualEvaluator)
+    is_dual = length(iterate.x) == 80 && (f_and_∇f isa DualEvaluator)
+    if is_primal
+        usol = iterate.x[1:40]
+        tsol = iterate.x[41:80]
+        @info "in step!" maximum(usol - tsol) feasible=all((@view iterate.fx[2:end]) .<= 0) 
+    end
+    # Check feasibility
+    any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
 
     # Solve the dual problem, searching for a conservative solution. 
     for i in 1:max_inner_iters
@@ -145,11 +154,16 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
 
         f_and_∇f(iterate.fx, iterate.∇fx, iterate.x + δ)
         conservative = Iterators.map(>, iterate.gx, iterate.fx)
-        all(conservative) && break
-        iterate.ρ[.!conservative] *= 2 # increase ρ until achieving conservative approximation
         dual_iterate.ρ .= one(T) # reinitialize penality weights
         dual_iterate.σ .= one(T) # reinitialize radii of trust region
         dual_iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
+        dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x)
+        all(conservative) && break
+        iterate.ρ[.!conservative] *= 2 # increase ρ until achieving conservative approximation
+        if i == max_inner_iters
+            is_primal && "could not find conservative approx for primal"
+            is_dual && "could not find conservative approx for dual"
+        end
     end
     
     # Update σ based on monotonicity of changes
