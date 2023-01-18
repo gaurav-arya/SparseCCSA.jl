@@ -45,15 +45,18 @@ function (evaluator::DualEvaluator{T})(gλ, ∇gλ, λ) where {T}
     @unpack σ, ρ, x, fx, ∇fx, lb, ub = evaluator.iterate
     @unpack a, b, δ = evaluator.buffers
     λ_all = CatView([one(T)], λ)
+    ∇gλ_all = CatView([one(T)], λ)
 
-    @info "In evaluator" size(a) size(b) size(∇fx) size(λ_all) size(∇gλ) size(δ) size(fx)
+    @info "In evaluator" size(a) size(b) size(∇fx) size(λ_all) size(∇gλ) size(δ) size(fx) size(σ)
     a .= 1 / dot(λ_all, ρ) .* (2 .* σ .^ 2)
     mul!(b, ∇fx', λ_all)
     @. δ = clamp(-b / (2 * a), -σ, σ)
     @. δ = clamp(δ, lb - x, ub - x)
     gλ[1] = dot(λ_all, fx) + sum(@. a * δ^2 + b * δ)
-    mul!(∇gλ, ∇fx, δ, zero(T), -one(T))
-    ∇gλ .-= fx + sum(abs2, δ ./ σ) ./ 2 .* ρ
+    # Below we populate ∇gλ_all, i.e. the gradient WRT λ_0, ..., λ_m,
+    # although we ultimately don't care abuot the first entry.
+    mul!(∇gλ_all, ∇fx, δ, zero(T), -one(T))
+    ∇gλ_all .-= fx + sum(abs2, δ ./ σ) ./ 2 .* ρ
     return nothing
 end
 
@@ -117,7 +120,7 @@ end
 
 Perform one CCSA iteration.
 """
-function step!(optimizer::CCSAOptimizer)
+function step!(optimizer::CCSAOptimizer{T}) where {T}
     @unpack f_and_∇f, iterate, dual_optimizer, max_inner_iters = optimizer
     iterate.Δx_last .= iterate.Δx
 
@@ -141,7 +144,7 @@ function step!(optimizer::CCSAOptimizer)
         mul!(iterate.gx, iterate.∇fx, δ, true, true)
 
         f_and_∇f(iterate.fx, iterate.∇fx, iterate.x + δ)
-        conservative = Iterators.map(>, gx_new, iterate.fx)
+        conservative = Iterators.map(>, iterate.gx, iterate.fx)
         all(conservative) && break
         iterate.ρ[.!conservative] *= 2 # increase ρ until achieving conservative approximation
         dual_iterate.ρ .= one(T) # reinitialize penality weights
