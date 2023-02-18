@@ -26,8 +26,8 @@ Instantiates the iterate structure for a dual problem with m constraints.
 """
 function init_iterate_for_dual(; m, T)
     return init_iterate(; n = m, m = 1, x0 = zeros(T, m),
-                        ∇fx_prototype = zeros(T, 1, m), lb = fill(typemin(T), m),
-                        ub = zeros(T, m))
+                        ∇fx_prototype = zeros(T, 1, m), lb = zeros(m),
+                        ub = fill(typemax(T), m))
 end
 
 """
