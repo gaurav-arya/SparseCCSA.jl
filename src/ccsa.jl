@@ -2,7 +2,7 @@
 This structure contains information about the current primal
 iterate, which is sufficient to specify the dual problem.
 """
-struct Iterate{T,L}
+@kwdef struct Iterate{T,L}
     x::Vector{T} # (n x 1) x 1 iterate xᵏ
     fx::Vector{T} # (m+1) x 1 values of objective and constraints
     ∇fx::L # (m+1) x n Jacobian linear operator at x
@@ -15,19 +15,28 @@ struct Iterate{T,L}
     gx::Vector{T} # (m+1) x 1 values of approximate objective and constraints
 end
 
+function init_iterate(; n, m, x0::Vector{T}, ∇fx_prototype, lb, ub) where {T}
+    return Iterate(; x=x0, fx=zeros(T, m+1), ∇fx=∇fx_prototype, ρ=ones(T, m+1), σ=ones(T, n), 
+                      lb, ub, Δx=zeros(T, n), Δx_last=zeros(T, n), gx=zeros(T, m+1))
+end
+
 """
 Mutable buffers used by the dual optimization algorithm.
 """
-struct DualBuffers{T}
+@kwdef struct DualBuffers{T}
     a::Vector{T} # n x 1 buffer
     b::Vector{T} # n x 1 buffer
     δ::Vector{T} # n x 1 buffer
 end
 
+function init_buffers(T, n)
+    DualBuffers(zeros(T, n), zeros(T, n), zeros(T, n))
+end
+
 """
 A callable structure for evaluating the dual function and its gradient.
 """
-struct DualEvaluator{T, L}
+@kwdef struct DualEvaluator{T, L}
     iterate::Iterate{T, L}
     buffers::DualBuffers{T}
 end
@@ -52,6 +61,7 @@ function (evaluator::DualEvaluator{T})(gλ, ∇gλ, λ) where {T}
     mul!(b, ∇fx', λ_all)
     @. δ = clamp(-b / (2 * a), -σ, σ)
     @. δ = clamp(δ, lb - x, ub - x)
+    @info "in evaluator" norm(ρ) norm(δ)
     gλ[1] = dot(λ_all, fx) + sum(@. a * δ^2 + b * δ)
     # Below we populate ∇gλ_all, i.e. the gradient WRT λ_0, ..., λ_m,
     # although we ultimately don't care abuot the first entry.
@@ -68,7 +78,7 @@ end
     max_iters::Int # max number of iterations
 =#
 
-struct CCSAOptimizer{T,F,L,D}
+@kwdef struct CCSAOptimizer{T,F,L,D}
     f_and_∇f::F # f(x) = (m+1, (m+1) x n linear operator)
     iterate::Iterate{T,L}
     dual_optimizer::D
@@ -76,7 +86,7 @@ struct CCSAOptimizer{T,F,L,D}
     max_inner_iters::Int
 end
 
-struct Solution{T}
+@kwdef struct Solution{T}
     x::Vector{T}
     RET::Symbol
 end
@@ -85,19 +95,17 @@ end
 Return a CCSAOptimizer that can be step!'d. 
 Free to allocate here.
 """
+# TODO: defaults for kwargs below
 function init(f_and_∇f, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters, max_dual_iters, max_dual_inner_iters, ∇fx_prototype) where {T}
-    x0 = (x0 === nothing) ? zeros(n) : copy(x0)
-    ∇fx = copy(∇fx_prototype)
+    # x0 = (x0 === nothing) ? zeros(n) : copy(x0)
 
     # Setup primal iterate, with n variables and m constraints
-    iterate = Iterate(x0, zeros(T, m+1), ∇fx, ones(T, m+1), ones(T, n), 
-                      lb, ub, zeros(T, n), zeros(T, n), zeros(T, m+1))
+    iterate = init_iterate(; n, m, x0, ∇fx_prototype=copy(∇fx_prototype), lb, ub)
 
     # Setup dual iterate, with m variables and 0 constraints
     dual_buffers = DualBuffers(zeros(T, n), zeros(T, n), zeros(T, n))
     dual_evaluator = DualEvaluator(iterate, dual_buffers)
-    dual_iterate = Iterate(zeros(T, m), [zero(T)], zeros(T, 1, m), [one(T)], ones(T, m),
-                           fill(typemin(T), m), zeros(T, m), zeros(T, m), zeros(T, m), [zero(T)])
+    dual_iterate = init_iterate(; n=m, m=1, x0=zeros(T, m), ∇fx_prototype=zeros(T, 1, m), lb=fill(typemin(T), m), ub=zeros(T, m))
 
     # Setup dual dual iterate, with 0 variables and 0 constraints
     dual_dual_evaluator = DualEvaluator(dual_iterate, DualBuffers(zeros(T, m), zeros(T, m), zeros(T, m)))
@@ -125,10 +133,11 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
 
     is_primal = length(iterate.x) == 80 && !(f_and_∇f isa DualEvaluator)
     is_dual = length(iterate.x) == 80 && (f_and_∇f isa DualEvaluator)
-    if is_primal
+    if is_primal || is_dual
         usol = iterate.x[1:40]
         tsol = iterate.x[41:80]
-        @info "in step!" maximum(usol - tsol) feasible=all((@view iterate.fx[2:end]) .<= 0) 
+        str = (is_primal ? "primal" : "dual") 
+        @info "in step! of $str" maximum(usol - tsol) feasible=all((@view iterate.fx[2:end]) .<= 0) 
     end
     # Check feasibility
     any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
@@ -143,6 +152,7 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         dual_evaluator = dual_optimizer.f_and_∇f
         dual_iterate = dual_optimizer.iterate
 
+        is_dual && @info "dual evaluations:"
         # Run dual evaluator at dual opt and obtain δ
         dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x) 
         δ = dual_evaluator.buffers.δ
@@ -158,7 +168,13 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         dual_iterate.σ .= one(T) # reinitialize radii of trust region
         dual_iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
         dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x)
-        all(conservative) && break
+        if all(conservative)
+            if is_primal || is_dual
+                str = is_primal ? "primal" : "dual"
+                println("found conservative approx for $str")
+            end
+            break
+        end
         iterate.ρ[.!conservative] *= 2 # increase ρ until achieving conservative approximation
         if i == max_inner_iters
             is_primal && println("could not find conservative approx for primal")

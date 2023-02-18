@@ -1,4 +1,5 @@
 using SparseCCSA
+using StaticArrays
 
 # Simple problem:
 # maximize x1^2 * x_2
@@ -6,14 +7,21 @@ using SparseCCSA
 # and x_1 <= -2
 # and x_2 <= 4
 
-function f_and_grad(x)
-    fx = [x[1]^2*x[2], x[1] - 3, x[1] + 4, x[2] - 4]
-    gradx = [2*x[1] 1; 1 0; 1 0; 0 1]
-    fx, gradx
+function f_and_∇f(fx, ∇fx, x)
+    # TODO: remove allocations in below so can test allocation-free'ness of algorithm.
+    fx .= [x[1]^2*x[2], x[1] - 3, x[1] + 4, x[2] - 4]
+    ∇fx .= [2*x[1] 1; 1 0; 1 0; 0 1]
+    return nothing
 end
 
 n = 2
 m = 3
+
+f_and_∇f(zeros(m+1), zeros(m+1, n), zeros(n))
+
+# Form optimizer
+opt = init(f_and_∇f, [0.0, 0.0], [100.0, 100.0], n, m; x0=zeros(n), max_iters=5, max_inner_iters=5, 
+            max_dual_iters=5, max_dual_inner_iters=5, ∇fx_prototype = zeros(m+1, n))
 
 st = CCSAState(2, # n
                3, # m
