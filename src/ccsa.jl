@@ -2,7 +2,7 @@
 This structure contains information about the current primal
 iterate, which is sufficient to specify the dual problem.
 """
-@kwdef struct Iterate{T,L}
+@kwdef struct Iterate{T, L}
     x::Vector{T} # (n x 1) x 1 iterate xᵏ
     fx::Vector{T} # (m+1) x 1 values of objective and constraints
     ∇fx::L # (m+1) x n Jacobian linear operator at x
@@ -16,8 +16,9 @@ iterate, which is sufficient to specify the dual problem.
 end
 
 function init_iterate(; n, m, x0::Vector{T}, ∇fx_prototype, lb, ub) where {T}
-    return Iterate(; x=x0, fx=zeros(T, m+1), ∇fx=∇fx_prototype, ρ=ones(T, m+1), σ=ones(T, n), 
-                      lb, ub, Δx=zeros(T, n), Δx_last=zeros(T, n), gx=zeros(T, m+1))
+    return Iterate(; x = x0, fx = zeros(T, m + 1), ∇fx = ∇fx_prototype, ρ = ones(T, m + 1),
+                   σ = ones(T, n),
+                   lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n), gx = zeros(T, m + 1))
 end
 
 """
@@ -78,9 +79,9 @@ end
     max_iters::Int # max number of iterations
 =#
 
-@kwdef struct CCSAOptimizer{T,F,L,D}
+@kwdef struct CCSAOptimizer{T, F, L, D}
     f_and_∇f::F # f(x) = (m+1, (m+1) x n linear operator)
-    iterate::Iterate{T,L}
+    iterate::Iterate{T, L}
     dual_optimizer::D
     max_iters::Int
     max_inner_iters::Int
@@ -96,30 +97,38 @@ Return a CCSAOptimizer that can be step!'d.
 Free to allocate here.
 """
 # TODO: defaults for kwargs below
-function init(f_and_∇f, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters, max_dual_iters, max_dual_inner_iters, ∇fx_prototype) where {T}
+# TODO: implement init recursively
+function init(f_and_∇f, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters,
+              max_dual_iters, max_dual_inner_iters, ∇fx_prototype) where {T}
     # x0 = (x0 === nothing) ? zeros(n) : copy(x0)
 
     # Setup primal iterate, with n variables and m constraints
-    iterate = init_iterate(; n, m, x0, ∇fx_prototype=copy(∇fx_prototype), lb, ub)
+    iterate = init_iterate(; n, m, x0, ∇fx_prototype = copy(∇fx_prototype), lb, ub)
 
     # Setup dual iterate, with m variables and 0 constraints
     dual_buffers = DualBuffers(zeros(T, n), zeros(T, n), zeros(T, n))
     dual_evaluator = DualEvaluator(iterate, dual_buffers)
-    dual_iterate = init_iterate(; n=m, m=1, x0=zeros(T, m), ∇fx_prototype=zeros(T, 1, m), lb=fill(typemin(T), m), ub=zeros(T, m))
+    dual_iterate = init_iterate(; n = m, m = 1, x0 = zeros(T, m),
+                                ∇fx_prototype = zeros(T, 1, m), lb = fill(typemin(T), m),
+                                ub = zeros(T, m))
 
     # Setup dual dual iterate, with 0 variables and 0 constraints
-    dual_dual_evaluator = DualEvaluator(dual_iterate, DualBuffers(zeros(T, m), zeros(T, m), zeros(T, m)))
-    dual_dual_iterate = Iterate(T[], [zero(T)], zeros(T, 1, 1), [one(T)], T[], T[], T[], T[], T[], [zero(T)])
+    dual_dual_evaluator = DualEvaluator(dual_iterate,
+                                        DualBuffers(zeros(T, m), zeros(T, m), zeros(T, m)))
+    dual_dual_iterate = Iterate(T[], [zero(T)], zeros(T, 1, 1), [one(T)], T[], T[], T[],
+                                T[], T[], [zero(T)])
 
     # Setup optimizers
-    dual_dual_optimizer = CCSAOptimizer(dual_dual_evaluator, dual_dual_iterate, nothing, 5, 0)
-    dual_optimizer = CCSAOptimizer(dual_evaluator, dual_iterate, dual_dual_optimizer, max_dual_iters, max_dual_inner_iters)
+    dual_dual_optimizer = CCSAOptimizer(dual_dual_evaluator, dual_dual_iterate, nothing, 5,
+                                        0)
+    dual_optimizer = CCSAOptimizer(dual_evaluator, dual_iterate, dual_dual_optimizer,
+                                   max_dual_iters, max_dual_inner_iters)
     optimizer = CCSAOptimizer(f_and_∇f, iterate, dual_optimizer, max_iters, max_inner_iters)
 
     # Initialize objective and gradient (TODO: should this move into step! ?)
     f_and_∇f(iterate.fx, iterate.∇fx, iterate.x)
 
-    return optimizer 
+    return optimizer
 end
 
 """
@@ -136,8 +145,9 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     if is_primal || is_dual
         usol = iterate.x[1:40]
         tsol = iterate.x[41:80]
-        str = (is_primal ? "primal" : "dual") 
-        @info "in step! of $str" maximum(usol - tsol) feasible=all((@view iterate.fx[2:end]) .<= 0) 
+        str = (is_primal ? "primal" : "dual")
+        @info "in step! of $str" maximum(usol - tsol) feasible=all((@view iterate.fx[2:end]) .<=
+                                                                   0)
     end
     # Check feasibility
     any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
@@ -148,15 +158,15 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         Optimize dual problem. If dual_optimizer is nothing,
         this means the problem has dimension 0.
         =#
-        (dual_optimizer !== nothing) && solve!(dual_optimizer) 
+        (dual_optimizer !== nothing) && solve!(dual_optimizer)
         dual_evaluator = dual_optimizer.f_and_∇f
         dual_iterate = dual_optimizer.iterate
 
         is_dual && @info "dual evaluations:"
         # Run dual evaluator at dual opt and obtain δ
-        dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x) 
+        dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x)
         δ = dual_evaluator.buffers.δ
-        iterate.Δx .= δ 
+        iterate.Δx .= δ
 
         # Check if conservative
         iterate.gx .= iterate.fx .+ sum(abs2, δ ./ iterate.σ) / 2 .* iterate.ρ
@@ -183,9 +193,10 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
             end
         end
     end
-    
+
     # Update σ based on monotonicity of changes
-    map!((σ, Δx, Δx_last) -> sign(Δx) == sign(Δx_last) ? 2σ : σ/2, iterate.σ, iterate.σ, iterate.Δx, iterate.Δx_last)
+    map!((σ, Δx, Δx_last) -> sign(Δx) == sign(Δx_last) ? 2σ : σ / 2, iterate.σ, iterate.σ,
+         iterate.Δx, iterate.Δx_last)
     # Halve ρ (be less conservative)
     iterate.ρ ./= 2
     iterate.x .+= iterate.Δx
@@ -211,7 +222,7 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
 end
 
 function solve!(opt::CCSAOptimizer)
-    for i in 1:opt.max_iters
+    for i in 1:(opt.max_iters)
         step!(opt)
     end
     return Solution(opt.iterate.x, :MAX_ITERS)
