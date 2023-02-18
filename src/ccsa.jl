@@ -22,6 +22,15 @@ function init_iterate(; n, m, x0::Vector{T}, ∇fx_prototype, lb, ub) where {T}
 end
 
 """
+Instantiates the iterate structure for a dual problem with m constraints.
+"""
+function init_iterate_for_dual(; m, T)
+    return init_iterate(; n = m, m = 1, x0 = zeros(T, m),
+                        ∇fx_prototype = zeros(T, 1, m), lb = fill(typemin(T), m),
+                        ub = zeros(T, m))
+end
+
+"""
 Mutable buffers used by the dual optimization algorithm.
 """
 @kwdef struct DualBuffers{T}
@@ -106,24 +115,25 @@ function init(f_and_∇f, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iter
     iterate = init_iterate(; n, m, x0, ∇fx_prototype = copy(∇fx_prototype), lb, ub)
 
     # Setup dual iterate, with m variables and 0 constraints
-    dual_buffers = DualBuffers(zeros(T, n), zeros(T, n), zeros(T, n))
-    dual_evaluator = DualEvaluator(iterate, dual_buffers)
-    dual_iterate = init_iterate(; n = m, m = 1, x0 = zeros(T, m),
-                                ∇fx_prototype = zeros(T, 1, m), lb = fill(typemin(T), m),
-                                ub = zeros(T, m))
+    dual_evaluator = DualEvaluator(; iterate, buffers = init_buffers(T, n))
+    dual_iterate = init_iterate_for_dual(; m, T)
 
     # Setup dual dual iterate, with 0 variables and 0 constraints
-    dual_dual_evaluator = DualEvaluator(dual_iterate,
-                                        DualBuffers(zeros(T, m), zeros(T, m), zeros(T, m)))
-    dual_dual_iterate = Iterate(T[], [zero(T)], zeros(T, 1, 1), [one(T)], T[], T[], T[],
-                                T[], T[], [zero(T)])
+    dual_dual_evaluator = DualEvaluator(; iterate = dual_iterate,
+                                        buffers = init_buffers(T, m))
+    dual_dual_iterate = init_iterate_for_dual(; m = 0, T)
 
     # Setup optimizers
-    dual_dual_optimizer = CCSAOptimizer(dual_dual_evaluator, dual_dual_iterate, nothing, 5,
-                                        0)
-    dual_optimizer = CCSAOptimizer(dual_evaluator, dual_iterate, dual_dual_optimizer,
-                                   max_dual_iters, max_dual_inner_iters)
-    optimizer = CCSAOptimizer(f_and_∇f, iterate, dual_optimizer, max_iters, max_inner_iters)
+    dual_dual_optimizer = CCSAOptimizer(; f_and_∇f = dual_dual_evaluator,
+                                        iterate = dual_dual_iterate,
+                                        dual_optimizer = nothing, max_iters = 5,
+                                        max_inner_iters = 0)
+    dual_optimizer = CCSAOptimizer(; f_and_∇f = dual_evaluator, iterate = dual_iterate,
+                                   dual_optimizer = dual_dual_optimizer,
+                                   max_iters = max_dual_iters,
+                                   max_inner_iters = max_dual_inner_iters)
+    optimizer = CCSAOptimizer(; f_and_∇f, iterate, dual_optimizer, max_iters,
+                              max_inner_iters)
 
     # Initialize objective and gradient (TODO: should this move into step! ?)
     f_and_∇f(iterate.fx, iterate.∇fx, iterate.x)
