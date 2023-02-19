@@ -67,18 +67,10 @@ function (evaluator::DualEvaluator{T})(gλ, ∇gλ, λ) where {T}
     λ_all = CatView([one(T)], λ)
     ∇gλ_all = CatView([one(T)], ∇gλ)
 
-    is_dual = (length(λ) > 0)
-    if is_dual
-        @info "In dual evaluator" repr(λ) repr(x) repr(fx)
-    end
-
-    # @info "In evaluator" size(a) size(b) size(∇fx) size(λ_all) size(∇gλ) size(δ) size(fx) size(σ)
     a .= dot(λ_all, ρ) ./ (2 .* σ .^ 2)
     mul!(b, ∇fx', λ_all)
     @. δ = clamp(-b / (2 * a), -σ, σ)
     @. δ = clamp(δ, lb - x, ub - x)
-    @show a b δ
-    # @info "in evaluator" norm(ρ) norm(δ)
     gλ[1] = dot(λ_all, fx) + sum(@. a * δ^2 + b * δ)
     # Below we populate ∇gλ_all, i.e. the gradient WRT λ_0, ..., λ_m,
     # although we ultimately don't care abuot the first entry.
@@ -86,12 +78,9 @@ function (evaluator::DualEvaluator{T})(gλ, ∇gλ, λ) where {T}
     ∇gλ_all .+= fx + sum(abs2, δ ./ σ) ./ 2 .* ρ
 
     # Negate to turn into minimization problem
-    # gλ .*= -1
-    # ∇gλ .*= -1
+    gλ .*= -1
+    ∇gλ .*= -1
 
-    # if is_dual
-    #     @info "End of dual evaluator" repr(λ) repr(x) repr(fx) repr(δ) repr(gλ) repr(∇gλ_all)
-    # end
     return nothing
 end
 

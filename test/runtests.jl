@@ -11,7 +11,8 @@ using ForwardDiff
     g1(δ) = δ1 + 1/2 (δ1^2 + δ2^2)
     g2(δ) = δ2 + 1/2 (δ1^2 + δ2^2),
 
-    giving dual objective h(λ) = min_{|δ| .< 1} g0(δ) + λ1 g1(δ) + λ2 g2(δ).
+    giving dual objective h(λ) = - min_{|δ| .< 1} g0(δ) + λ1 g1(δ) + λ2 g2(δ),
+    negated to make it a minimization problem.
 
     The solution is δ1 = -(2 + λ1) / (1 + λ1 + λ2) and δ2 = -(1 + λ2) / (1 + λ1 + λ2),
     subject to additional clamping.
@@ -22,7 +23,7 @@ using ForwardDiff
     g1(δ) = δ[1] + 1/2 * (δ[1]^2 + δ[2]^2)
     g2(δ) = δ[2] + 1/2 * (δ[1]^2 + δ[2]^2)
     function h(λ, δ)
-        return g0(δ) + λ[1] * g1(δ) + λ[2] * g2(δ)
+        return -(g0(δ) + λ[1] * g1(δ) + λ[2] * g2(δ))
     end
     h(λ) = h(λ, δ_solution(λ))
 
@@ -41,7 +42,8 @@ using ForwardDiff
                 # Add unit scale to both sides when comparing to 0 (see julia/#32244)
                 @test δ_gradi + 1 ≈ 1.0
             else
-                @test (abs(δi) ≈ 1.0) && (sign(δ_gradi) != sign(δi))
+                # Test that δi is clamped to -1 or 1, and that gradient is either 0 or agrees in sign with clamped value.
+                @test (abs(δi) ≈ 1.0) && ((sign(δ_gradi) == sign(δi)) || (δ_gradi + 1 ≈ 1.0))
             end
         end
 
