@@ -130,6 +130,7 @@ function init(f_and_∇f, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iter
     dual_iterate = init_iterate_for_dual(; m, T)
 
     # Setup dual dual iterate, with 0 variables and 0 constraints
+    # TODO: how is this evaluator (and the optimizer) used?
     dual_dual_evaluator = DualEvaluator(; iterate = dual_iterate,
                                         buffers = init_buffers(; T, n=m))
     dual_dual_iterate = init_iterate_for_dual(; m = 0, T)
@@ -175,16 +176,6 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
 
     # Solve the dual problem, searching for a conservative solution. 
     for i in 1:max_inner_iters
-        if is_primal
-            # dual_evaluator = dual_optimizer.f_and_∇f
-            # dual_iterate = dual_optimizer.iterate
-            # prev_∇fx = dual_iterate.∇fx
-            # dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x)
-            # δ = dual_evaluator.buffers.δ
-            # @info "testing gradient of dual" repr(dual_iterate.fx) repr(dual_iterate.∇fx) repr(prev_∇fx) repr(dual_iterate.x) repr(δ)
-            # error("end")
-        end
-
         #= 
         Optimize dual problem. If dual_optimizer is nothing,
         this means the problem has dimension 0.
