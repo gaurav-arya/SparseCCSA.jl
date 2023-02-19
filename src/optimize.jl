@@ -6,39 +6,48 @@
     max_iters::Int # max number of iterations
 =#
 
+"""
+Because we call CCSA recursively to solve the dual problem, we define an AbstractCCSAOptimizer
+type whose interface is supported both by the primal optimizer and the dual optimizer. Interface:
+
+- max_iters, max_inner_iters fields
+- get_iterate
+- propose_δ
+- evaluate_current (only for dual optimizer?)
+"""
 abstract type AbstractCCSAOptimizer end
 
-@kwdef struct CCSAOptimizer{T, F, L, D} <: AbstractCCSAOptimizer
-    f_and_∇f::F # f(x) = (m+1, (m+1) x n linear operator)
+@kwdef struct DualCCSAOptimizer{T, F, L, D} <: AbstractCCSAOptimizer
+    dual_iterate::Iterate{T, L}
+    dual_buffers::DualBuffers{T}
+    dual_dual_buffers::DualBuffers{T}
+    max_iters::Int
+    max_inner_iters::Int
+end
+@kwdef struct CCSAOptimizer{T, F, L, D<:DualCCSAOptimizer} <: AbstractCCSAOptimizer
+    f_and_jac::F # f(x) = (m+1, (m+1) x n linear operator)
     iterate::Iterate{T, L}
     dual_optimizer::D
     max_iters::Int
     max_inner_iters::Int
 end
 
-@kwdef struct DualCCSAOptimizer{T, F, L, D} <: AbstractCCSAOptimizer
-    iterate::Iterate{T, L}
-    buffers::DualBuffers{T}
-    max_iters::Int
-    max_inner_iters::Int
-end
+get_f_and_jac(optimizer::DualCCSAOptimizer) = DualEvaluator(optimizer.iterate, optimizer.buffers)
+get_f_and_jac(optimizer::CCSAOptimizer) = optimizer.f_and_jac
 
-get_evaluator(optimizer::CCSAOptimizer) = optimizer.f_and_∇f 
+# This function is only needed for the dual optimizer
+function evaluate_current(optimizer::DualCCSAOptimizer)
+    dual_evaluator = get_evaluator(optimizer) 
+    dual_iterate = optimizer.iterate
+    dual_evaluator(dual_iterate.fx, dual_iterate.jac, dual_iterate.x)
+    return dual_evaluator.buffers.δ
+end
 
 function propose_δ(optimizer::CCSAOptimizer)
     dual_optimizer = optimizer.dual_optimizer
     solve!(dual_optimizer)
     # Run dual evaluator at dual opt and obtain δ
     return evaluate_current(dual_optimizer)
-end
-
-get_evaluator(optimizer::DualCCSAOptimizer) = DualEvaluator(optimizer.iterate, optimizer.buffers)
-
-function evaluate_current(optimizer::DualCCSAOptimizer)
-    dual_evaluator = get_evaluator(optimizer) 
-    dual_iterate = optimizer.iterate
-    dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x)
-    return dual_evaluator.buffers.δ
 end
 
 function propose_δ(optimizer::DualCCSAOptimizer)
@@ -56,12 +65,12 @@ Free to allocate here.
 """
 # TODO: defaults for kwargs below
 # TODO: implement init recursively
-function init(f_and_∇f, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters,
-              max_dual_iters, max_dual_inner_iters, ∇fx_prototype) where {T}
+function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters,
+              max_dual_iters, max_dual_inner_iters, jac_prototype) where {T}
     # x0 = (x0 === nothing) ? zeros(n) : copy(x0)
 
     # Setup primal iterate, with n variables and m constraints
-    iterate = init_iterate(; n, m, x0, ∇fx_prototype = copy(∇fx_prototype), lb, ub)
+    iterate = init_iterate(; n, m, x0, jac_prototype = copy(jac_prototype), lb, ub)
 
     # Setup dual iterate, with m variables and 0 constraints
     # dual_evaluator = DualEvaluator(; iterate, buffers = init_buffers(; T, n))
@@ -70,32 +79,32 @@ function init(f_and_∇f, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iter
     dual_optimizer = DualCCSAOptimizer(; )
 
     # Setup optimizers
-    dual_optimizer = CCSAOptimizer(; f_and_∇f = dual_evaluator, iterate = dual_iterate,
+    dual_optimizer = CCSAOptimizer(; f_and_jac = dual_evaluator, iterate = dual_iterate,
                                    dual_optimizer = nothing,
                                    max_iters = max_dual_iters,
                                    max_inner_iters = max_dual_inner_iters)
-    optimizer = CCSAOptimizer(; f_and_∇f, iterate, dual_optimizer, max_iters,
+    optimizer = CCSAOptimizer(; f_and_jac, iterate, dual_optimizer, max_iters,
                               max_inner_iters)
 
     return optimizer
 end
 
 """
-    step!(optimizer::CCSAOptimizer)
+    step!(optimizer::AbstractCCSAOptimizer)
 
 Perform one CCSA iteration.
 
 What are the invariants / contracts?
-- optimizer.iterate.{fx,∇fx} come from applying optimizer.f_and_∇f at optimizer.iterate.x
-- optimizer.dual_optimizer.f_and_∇f contains a ref to optimizer.iterate, so updating latter updates the former. 
+- optimizer.iterate.{fx,jac} come from applying optimizer.f_and_jac at optimizer.iterate.x
+- optimizer.dual_optimizer.f_and_jac contains a ref to optimizer.iterate, so updating latter updates the former. 
 """
 function step!(optimizer::CCSAOptimizer{T}) where {T}
-    @unpack f_and_∇f, iterate, dual_optimizer, max_inner_iters = optimizer
+    @unpack f_and_jac, iterate, dual_optimizer, max_inner_iters = optimizer
     iterate.Δx_last .= iterate.Δx
 
-    is_primal = !(f_and_∇f isa DualEvaluator)
-    is_dual = (f_and_∇f isa DualEvaluator) && (length(iterate.x) == 2)
-    # is_dual = length(iterate.x) == && (f_and_∇f isa DualEvaluator)
+    is_primal = !(f_and_jac isa DualEvaluator)
+    is_dual = (f_and_jac isa DualEvaluator) && (length(iterate.x) == 2)
+    # is_dual = length(iterate.x) == && (f_and_jac isa DualEvaluator)
     if is_primal
         @info "in step! of primal" repr(iterate.x) repr(dual_optimizer.iterate.x) #maximum(usol - tsol) feasible=all((@view iterate.fx[2:end]) .<=
                                    #                                0)
@@ -110,7 +119,7 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         # As shown here, the dual_optimizer's evaluator has a reference to our iterate.
         # TODO: aliasing can be a bit trricky, so either document assumption explicitly
         # (that dual_optimizer implicitly depends on CCSAOptimizer's iterate), or change design.
-        @assert iterate == dual_optimizer.f_and_∇f.iterate
+        @assert iterate == dual_optimizer.f_and_jac.iterate
 
         #= 
         Optimize dual problem. If dual_optimizer is nothing,
@@ -120,10 +129,10 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         # Why do we do it?
         if dual_optimizer !== nothing
             solve!(dual_optimizer)
-            dual_evaluator = dual_optimizer.f_and_∇f
+            dual_evaluator = dual_optimizer.f_and_jac
             dual_iterate = dual_optimizer.iterate
             # Run dual evaluator at dual opt and obtain δ
-            dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x)
+            dual_evaluator(dual_iterate.fx, dual_iterate.jac, dual_iterate.x)
             δ = dual_evaluator.buffers.δ
             iterate.Δx .= δ
 
@@ -132,8 +141,8 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         # No, because it doesn't do the linear combinations.
         # BUG: need to negate gx since negated by evaluator. No, this is fine...
         iterate.gx .= iterate.fx .+ sum(abs2, δ ./ iterate.σ) / 2 .* iterate.ρ
-        mul!(iterate.gx, iterate.∇fx, δ, true, true)
-        f_and_∇f(iterate.fx2, iterate.∇fx, iterate.x + δ)
+        mul!(iterate.gx, iterate.jac, δ, true, true)
+        f_and_jac(iterate.fx2, iterate.jac, iterate.x + δ)
         conservative = Iterators.map(>=, iterate.gx, iterate.fx2)
 
         iterate.ρ[.!conservative] *= 2 # increase ρ until achieving conservative approximation
@@ -144,7 +153,7 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         dual_iterate.ρ .= one(T) # reinitialize penality weights
         dual_iterate.σ .= one(T) # reinitialize radii of trust region
         dual_iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
-        dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x)
+        dual_evaluator(dual_iterate.fx, dual_iterate.jac, dual_iterate.x)
 
         if is_primal
             @info "one primal inner iteration:" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(δ)
@@ -187,7 +196,7 @@ end
 function solve!(optimizer::CCSAOptimizer)
     # Initialize objective and gradient (TODO: should this move into step! ?)
     iterate = optimizer.iterate
-    optimizer.f_and_∇f(iterate.fx, iterate.∇fx, iterate.x)
+    optimizer.f_and_jac(iterate.fx, iterate.jac, iterate.x)
 
     # TODO: catch stopping conditions in opt and exit here
     for i in 1:(optimizer.max_iters)

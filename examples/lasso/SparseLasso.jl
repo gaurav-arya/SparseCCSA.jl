@@ -26,23 +26,23 @@ function make_problem(α, n)
     for i in 5n+1:6n
         I[i]=i-(4n-1); J[i]=i-(4n); V[i]=-1;
     end
-    ∇f=sparse(I,J,V)
-    function creat_∇f(x)
-        ∇f.nzval[1:3:3n-2].=A'*(A*(@view x[1:n])-y)
-        return ∇f
+    jac=sparse(I,J,V)
+    function creat_jac(x)
+        jac.nzval[1:3:3n-2].=A'*(A*(@view x[1:n])-y)
+        return jac
     end
     f=Vector{Float64}(undef,2n+1)
-    function f_and_∇f(x)
+    function f_and_jac(x)
         f = zeros(2n+1)
         f[1]=sum((A*(@view x[1:n])-y).^2)+α*sum(@view x[n+1:2n])
         for i in 1:n
             f[i+1]=-x[i]-x[i+n]
             f[i+n+1]=x[i]-x[i+n]
         end
-        return f,creat_∇f(x)
+        return f,creat_jac(x)
     end
     max_iters=3
-    state = CCSAState(2n, 2n, f_and_∇f,zeros(2n),max_iters=max_iters,xtol_rel=1e-4)
+    state = CCSAState(2n, 2n, f_and_jac,zeros(2n),max_iters=max_iters,xtol_rel=1e-4)
     return state
 end
 

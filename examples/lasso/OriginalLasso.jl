@@ -19,11 +19,11 @@ A=sparse(Matrix(SymTridiagonal(2*ones(n),ones(n))))
 x_true= zeros(n)*10
 x_true.= sprand(n,0.1)*10
 y=A*x_true
-function f_and_∇f(x)
+function f_and_jac(x)
     f=[sum((A*x-y).^2)+α*norm(x,1)]
-    ∇f=(A*x-y)'*A.+α.*signbit.(x)'
-    return f,∇f
+    jac=(A*x-y)'*A.+α.*signbit.(x)'
+    return f,jac
 end
-opt = CCSAState(n, 0, f_and_∇f,zeros(n),max_iters=2)
+opt = CCSAState(n, 0, f_and_jac,zeros(n),max_iters=2)
 SparseCCSA.optimize(opt,callback=cb) 
 plot(1:opt.iters,value[1:opt.iters],yscale=:log10)
