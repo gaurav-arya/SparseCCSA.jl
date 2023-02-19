@@ -25,11 +25,9 @@ fx
 ## Solve with SparseCCSA
 
 # Form optimizer
-begin
 opt = init(f_and_∇f, [0.0, 0.0], [100.0, 100.0], n, m; x0 = [1.0, 1.0], max_iters = 5,
            max_inner_iters = 5,
           max_dual_iters = 2, max_dual_inner_iters = 5, ∇fx_prototype = zeros(m + 1, n));
-try step!(opt) catch e end
-end
+step!(opt)
 
 opt.iterate.x

@@ -27,6 +27,7 @@ using ForwardDiff
     h(λ) = h(λ, δ_solution(λ))
 
     # Form dual evaluator 
+    # TODO: init_iterate is really mostly for initializing the type, abusing here to get the right values.
     iterate = SparseCCSA.init_iterate(; n = 2, m = 2, x0 = ones(2), ∇fx_prototype = [2 1; 1 0; 0 1], lb=[-Inf, -Inf], ub=[Inf, Inf])    
     buffers = SparseCCSA.init_buffers(; T=Float64, n=2)
     dual_evaluator = SparseCCSA.DualEvaluator(; iterate, buffers)
@@ -51,10 +52,6 @@ using ForwardDiff
     end
 
 end
-
-
-# TODO: init_iterate is really mostly for initializing the type, abusing here to get the right values.
-# end
 
 ##### Test the constructor #####
 @testset "Constructor" begin
