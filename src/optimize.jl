@@ -1,96 +1,3 @@
-"""
-This structure contains information about the current primal
-iterate, which is sufficient to specify the dual problem.
-"""
-@kwdef struct Iterate{T, L}
-    x::Vector{T} # (n x 1) x 1 iterate xᵏ
-    fx::Vector{T} # (m+1) x 1 values of objective and constraints
-    ∇fx::L # (m+1) x n Jacobian linear operator at x
-    ρ::Vector{T} # (m+1) x 1 penality weight
-    σ::Vector{T} # n x 1 axes lengths of trust region
-    lb::Vector{T} # n x 1 lower bounds on solution
-    ub::Vector{T} # n x 1 upper bounds on solution
-    # Below are buffers used by inner iteeration logic
-    Δx::Vector{T} # n x 1 xᵏ⁺¹ - xᵏ
-    Δx_last::Vector{T} # n x 1 xᵏ - xᵏ⁻¹
-    gx::Vector{T} # (m+1) x 1 values of approximate objective and constraints
-    fx2::Vector{T} # (m+1) x 1 values of approximate objective and constraints
-end
-
-function init_iterate(; n, m, x0::Vector{T}, ∇fx_prototype, lb, ub) where {T}
-    return Iterate(; x = x0, fx = zeros(T, m + 1), ∇fx = ∇fx_prototype, ρ = ones(T, m + 1),
-                   σ = ones(T, n),
-                   lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n), gx = zeros(T, m + 1), fx2 = zeros(T, m + 1))
-end
-
-"""
-Instantiates the iterate structure for a dual problem with m constraints.
-"""
-function init_iterate_for_dual(; m, T)
-    return init_iterate(; n = m, m = 0, x0 = zeros(T, m),
-                        ∇fx_prototype = zeros(T, 1, m), lb = zeros(m),
-                        ub = fill(typemax(T), m))
-end
-
-"""
-Mutable buffers used by the dual optimization algorithm.
-"""
-@kwdef struct DualBuffers{T}
-    a::Vector{T} # n x 1 buffer
-    b::Vector{T} # n x 1 buffer
-    δ::Vector{T} # n x 1 buffer
-end
-
-function init_buffers(; T, n)
-    DualBuffers(zeros(T, n), zeros(T, n), zeros(T, n))
-end
-
-"""
-A callable structure for evaluating the dual function and its gradient.
-"""
-@kwdef struct DualEvaluator{T, L}
-    iterate::Iterate{T, L}
-    buffers::DualBuffers{T}
-end
-
-"""
-    (evaluator::DualEvaluator{T})(gλ, ∇gλ, λ)
-
-Set the dual gradient ∇gλ and dual objective gλ
-in-place to their new values at λ.
-The internal dual buffer δ is also set so that
-xᵏ + δ is the optimal primal.
-Shapes: ∇gλ and λ are m-length, gλ is 1-length.
-(Note: negated use of g)
-"""
-function (evaluator::DualEvaluator{T})(gλ, ∇gλ, λ) where {T}
-    @unpack σ, ρ, x, fx, ∇fx, lb, ub = evaluator.iterate
-    @unpack a, b, δ = evaluator.buffers
-    λ_all = CatView([one(T)], λ)
-    ∇gλ_all = CatView([one(T)], ∇gλ)
-
-    a .= dot(λ_all, ρ) ./ (2 .* σ .^ 2)
-    mul!(b, ∇fx', λ_all)
-    @. δ = clamp(-b / (2 * a), -σ, σ)
-    @. δ = clamp(δ, lb - x, ub - x)
-    gλ[1] = dot(λ_all, fx) + sum(@. a * δ^2 + b * δ)
-    # Below we populate ∇gλ_all, i.e. the gradient WRT λ_0, ..., λ_m,
-    # although we ultimately don't care abuot the first entry.
-    mul!(∇gλ_all, ∇fx, δ)
-    ∇gλ_all .+= fx + sum(abs2, δ ./ σ) ./ 2 .* ρ
-
-    is_dual = length(δ) > 0
-    if is_dual
-        # @info "in dual evaluator" δ
-    end
-
-    # Negate to turn into minimization problem
-    gλ .*= -1
-    ∇gλ .*= -1
-
-    return nothing
-end
-
 #=
     xtol_rel::T # relative tolerence
     xtol_abs::T # absolute tolerence
@@ -99,12 +6,43 @@ end
     max_iters::Int # max number of iterations
 =#
 
-@kwdef struct CCSAOptimizer{T, F, L, D}
+abstract type AbstractCCSAOptimizer end
+
+@kwdef struct CCSAOptimizer{T, F, L, D} <: AbstractCCSAOptimizer
     f_and_∇f::F # f(x) = (m+1, (m+1) x n linear operator)
     iterate::Iterate{T, L}
     dual_optimizer::D
     max_iters::Int
     max_inner_iters::Int
+end
+
+@kwdef struct DualCCSAOptimizer{T, F, L, D} <: AbstractCCSAOptimizer
+    iterate::Iterate{T, L}
+    buffers::DualBuffers{T}
+    max_iters::Int
+    max_inner_iters::Int
+end
+
+get_evaluator(optimizer::CCSAOptimizer) = optimizer.f_and_∇f 
+
+function propose_δ(optimizer::CCSAOptimizer)
+    dual_optimizer = optimizer.dual_optimizer
+    solve!(dual_optimizer)
+    # Run dual evaluator at dual opt and obtain δ
+    return evaluate_current(dual_optimizer)
+end
+
+get_evaluator(optimizer::DualCCSAOptimizer) = DualEvaluator(optimizer.iterate, optimizer.buffers)
+
+function evaluate_current(optimizer::DualCCSAOptimizer)
+    dual_evaluator = get_evaluator(optimizer) 
+    dual_iterate = optimizer.iterate
+    dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x)
+    return dual_evaluator.buffers.δ
+end
+
+function propose_δ(optimizer::DualCCSAOptimizer)
+
 end
 
 @kwdef struct Solution{T}
@@ -126,29 +64,18 @@ function init(f_and_∇f, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iter
     iterate = init_iterate(; n, m, x0, ∇fx_prototype = copy(∇fx_prototype), lb, ub)
 
     # Setup dual iterate, with m variables and 0 constraints
-    dual_evaluator = DualEvaluator(; iterate, buffers = init_buffers(; T, n))
+    # dual_evaluator = DualEvaluator(; iterate, buffers = init_buffers(; T, n))
     dual_iterate = init_iterate_for_dual(; m, T)
 
-    # Setup dual dual iterate, with 0 variables and 0 constraints
-    # TODO: how is this evaluator (and the optimizer) used?
-    dual_dual_evaluator = DualEvaluator(; iterate = dual_iterate,
-                                        buffers = init_buffers(; T, n=m))
-    dual_dual_iterate = init_iterate_for_dual(; m = 0, T)
+    dual_optimizer = DualCCSAOptimizer(; )
 
     # Setup optimizers
-    dual_dual_optimizer = CCSAOptimizer(; f_and_∇f = dual_dual_evaluator,
-                                        iterate = dual_dual_iterate,
-                                        dual_optimizer = nothing, max_iters = 5,
-                                        max_inner_iters = 0)
     dual_optimizer = CCSAOptimizer(; f_and_∇f = dual_evaluator, iterate = dual_iterate,
-                                   dual_optimizer = dual_dual_optimizer,
+                                   dual_optimizer = nothing,
                                    max_iters = max_dual_iters,
                                    max_inner_iters = max_dual_inner_iters)
     optimizer = CCSAOptimizer(; f_and_∇f, iterate, dual_optimizer, max_iters,
                               max_inner_iters)
-
-    # Initialize objective and gradient (TODO: should this move into step! ?)
-    f_and_∇f(iterate.fx, iterate.∇fx, iterate.x)
 
     return optimizer
 end
@@ -160,7 +87,7 @@ Perform one CCSA iteration.
 
 What are the invariants / contracts?
 - optimizer.iterate.{fx,∇fx} come from applying optimizer.f_and_∇f at optimizer.iterate.x
-- optimizer.dual_optimizer contains a ref to optimizer.iterate, so updating latter updates the former. 
+- optimizer.dual_optimizer.f_and_∇f contains a ref to optimizer.iterate, so updating latter updates the former. 
 """
 function step!(optimizer::CCSAOptimizer{T}) where {T}
     @unpack f_and_∇f, iterate, dual_optimizer, max_inner_iters = optimizer
@@ -189,21 +116,21 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         Optimize dual problem. If dual_optimizer is nothing,
         this means the problem has no constraints (the dual problem has 0 constraints). 
         =#
-        (dual_optimizer !== nothing) && solve!(dual_optimizer)
-        # TODO: below two lines look scary if dual_optimizer is nothing
-        dual_evaluator = dual_optimizer.f_and_∇f
-        dual_iterate = dual_optimizer.iterate
-
-        # Run dual evaluator at dual opt and obtain δ
-        is_dual && println("Running dual dual evaluator")
-        dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x)
-        is_dual && println("Ran dual dual evaluator")
-        δ = dual_evaluator.buffers.δ # problem: this is 0
-        iterate.Δx .= δ
+        # Consider the below line in case where we're calling the dual_dual_optimizer (i.e. we're in the dual here). 
+        # Why do we do it?
+        if dual_optimizer !== nothing
+            solve!(dual_optimizer)
+            dual_evaluator = dual_optimizer.f_and_∇f
+            dual_iterate = dual_optimizer.iterate
+            # Run dual evaluator at dual opt and obtain δ
+            dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x)
+            δ = dual_evaluator.buffers.δ
+            iterate.Δx .= δ
 
         # Check if conservative
         # TODO: can this be retrieved from dual evaluator?
         # No, because it doesn't do the linear combinations.
+        # BUG: need to negate gx since negated by evaluator. No, this is fine...
         iterate.gx .= iterate.fx .+ sum(abs2, δ ./ iterate.σ) / 2 .* iterate.ρ
         mul!(iterate.gx, iterate.∇fx, δ, true, true)
         f_and_∇f(iterate.fx2, iterate.∇fx, iterate.x + δ)
@@ -257,10 +184,14 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     =#
 end
 
-function solve!(opt::CCSAOptimizer)
+function solve!(optimizer::CCSAOptimizer)
+    # Initialize objective and gradient (TODO: should this move into step! ?)
+    iterate = optimizer.iterate
+    optimizer.f_and_∇f(iterate.fx, iterate.∇fx, iterate.x)
+
     # TODO: catch stopping conditions in opt and exit here
-    for i in 1:(opt.max_iters)
-        step!(opt)
+    for i in 1:(optimizer.max_iters)
+        step!(optimizer)
     end
-    return Solution(opt.iterate.x, :MAX_ITERS)
+    return Solution(optimizer.iterate.x, :MAX_ITERS)
 end
