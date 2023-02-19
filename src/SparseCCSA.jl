@@ -6,7 +6,7 @@ using UnPack
 
 import Base.@kwdef
 
-export init, solve!
+export init, solve!, step!
 
 include("ccsa.jl")
 
