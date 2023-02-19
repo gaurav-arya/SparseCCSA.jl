@@ -77,17 +77,20 @@ function (evaluator::DualEvaluator{T})(gλ, ∇gλ, λ) where {T}
     mul!(b, ∇fx', λ_all)
     @. δ = clamp(-b / (2 * a), -σ, σ)
     @. δ = clamp(δ, lb - x, ub - x)
+    @show a b δ
     # @info "in evaluator" norm(ρ) norm(δ)
     gλ[1] = dot(λ_all, fx) + sum(@. a * δ^2 + b * δ)
     # Below we populate ∇gλ_all, i.e. the gradient WRT λ_0, ..., λ_m,
     # although we ultimately don't care abuot the first entry.
-    mul!(∇gλ_all, ∇fx, δ, zero(T), -one(T))
-    @show ∇gλ_all
-    ∇gλ_all .-= fx + sum(abs2, δ ./ σ) ./ 2 .* ρ
+    mul!(∇gλ_all, ∇fx, δ)
+    ∇gλ_all .+= fx + sum(abs2, δ ./ σ) ./ 2 .* ρ
+
+    # Negate to turn into minimization problem
+    # gλ .*= -1
+    # ∇gλ .*= -1
 
     # if is_dual
     #     @info "End of dual evaluator" repr(λ) repr(x) repr(fx) repr(δ) repr(gλ) repr(∇gλ_all)
-    #     error("end")
     # end
     return nothing
 end
