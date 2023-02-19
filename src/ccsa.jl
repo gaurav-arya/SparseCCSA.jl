@@ -157,6 +157,10 @@ end
     step!(optimizer::CCSAOptimizer)
 
 Perform one CCSA iteration.
+
+What are the invariants / contracts?
+- optimizer.iterate.{fx,∇fx} come from applying optimizer.f_and_∇f at optimizer.iterate.x
+- optimizer.dual_optimizer contains a ref to optimizer.iterate, so updating latter updates the former. 
 """
 function step!(optimizer::CCSAOptimizer{T}) where {T}
     @unpack f_and_∇f, iterate, dual_optimizer, max_inner_iters = optimizer
@@ -176,13 +180,17 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
 
     # Solve the dual problem, searching for a conservative solution. 
     for i in 1:max_inner_iters
+        # As shown here, the dual_optimizer's evaluator has a reference to our iterate.
+        # TODO: aliasing can be a bit trricky, so either document assumption explicitly
+        # (that dual_optimizer implicitly depends on CCSAOptimizer's iterate), or change design.
+        @assert iterate == dual_optimizer.f_and_∇f.iterate
+
         #= 
         Optimize dual problem. If dual_optimizer is nothing,
-        this means the problem has dimension 0.
+        this means the problem has no constraints (the dual problem has 0 constraints). 
         =#
-        is_dual && println("Solving dual dual optimizer")
         (dual_optimizer !== nothing) && solve!(dual_optimizer)
-        is_dual && println("Solved dual dual optimizer")
+        # TODO: below two lines look scary if dual_optimizer is nothing
         dual_evaluator = dual_optimizer.f_and_∇f
         dual_iterate = dual_optimizer.iterate
 
@@ -195,17 +203,15 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
 
         # Check if conservative
         # TODO: can this be retrieved from dual evaluator?
+        # No, because it doesn't do the linear combinations.
         iterate.gx .= iterate.fx .+ sum(abs2, δ ./ iterate.σ) / 2 .* iterate.ρ
         mul!(iterate.gx, iterate.∇fx, δ, true, true)
         f_and_∇f(iterate.fx2, iterate.∇fx, iterate.x + δ)
         conservative = Iterators.map(>=, iterate.gx, iterate.fx2)
 
-        if is_primal
-            @info "one primal inner iteration:" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(δ)
-        elseif is_dual
-            @info "one dual inner iteration" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(δ)
-        end
+        iterate.ρ[.!conservative] *= 2 # increase ρ until achieving conservative approximation
 
+        # Reinitialize dual_iterate (what's changed? iterate's ρ has changed, and thus dual_evaluator.)
         # TODO: should this reiniitalization occur elsewhere? (E.g. as part of solve! ?)
         # Also, should this reiniitalization occur at all?
         dual_iterate.ρ .= one(T) # reinitialize penality weights
@@ -213,12 +219,14 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         dual_iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
         dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x)
 
-        iterate.ρ[.!conservative] *= 2 # increase ρ until achieving conservative approximation
-        if i == max_inner_iters
-            is_primal && println("could not find conservative approx for primal")
+        if is_primal
+            @info "one primal inner iteration:" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(δ)
+            (i == max_inner_iters) && println("could not find conservative approx for primal")
             # if is_dual
             #     @info "could not find conservative approx for dual" norm(δ) norm(iterate.ρ)
             # end
+        elseif is_dual
+            @info "one dual inner iteration" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(δ)
         end
     end
 
