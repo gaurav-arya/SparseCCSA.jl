@@ -10,15 +10,17 @@ iterate, which is sufficient to specify the dual problem.
     σ::Vector{T} # n x 1 axes lengths of trust region
     lb::Vector{T} # n x 1 lower bounds on solution
     ub::Vector{T} # n x 1 upper bounds on solution
+    # Below are buffers used by inner iteeration logic
     Δx::Vector{T} # n x 1 xᵏ⁺¹ - xᵏ
     Δx_last::Vector{T} # n x 1 xᵏ - xᵏ⁻¹
     gx::Vector{T} # (m+1) x 1 values of approximate objective and constraints
+    fx2::Vector{T} # (m+1) x 1 values of approximate objective and constraints
 end
 
 function init_iterate(; n, m, x0::Vector{T}, ∇fx_prototype, lb, ub) where {T}
     return Iterate(; x = x0, fx = zeros(T, m + 1), ∇fx = ∇fx_prototype, ρ = ones(T, m + 1),
                    σ = ones(T, n),
-                   lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n), gx = zeros(T, m + 1))
+                   lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n), gx = zeros(T, m + 1), fx2 = zeros(T, m + 1))
 end
 
 """
@@ -79,7 +81,7 @@ function (evaluator::DualEvaluator{T})(gλ, ∇gλ, λ) where {T}
 
     is_dual = length(δ) > 0
     if is_dual
-        @info "in dual evaluator" δ
+        # @info "in dual evaluator" δ
     end
 
     # Negate to turn into minimization problem
@@ -201,10 +203,11 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         iterate.Δx .= δ
 
         # Check if conservative
+        # TODO: can this be retrieved from dual evaluator?
         iterate.gx .= iterate.fx .+ sum(abs2, δ ./ iterate.σ) / 2 .* iterate.ρ
         mul!(iterate.gx, iterate.∇fx, δ, true, true)
-        f_and_∇f(iterate.fx, iterate.∇fx, iterate.x + δ)
-        conservative = Iterators.map(>=, iterate.gx, iterate.fx)
+        f_and_∇f(iterate.fx2, iterate.∇fx, iterate.x + δ)
+        conservative = Iterators.map(>=, iterate.gx, iterate.fx2)
 
         if is_primal
             @info "one primal inner iteration:" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(δ)
@@ -212,6 +215,8 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
             @info "one dual inner iteration" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(δ)
         end
 
+        # TODO: should this reiniitalization occur elsewhere? (E.g. as part of solve! ?)
+        # Also, should this reiniitalization occur at all?
         dual_iterate.ρ .= one(T) # reinitialize penality weights
         dual_iterate.σ .= one(T) # reinitialize radii of trust region
         dual_iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
