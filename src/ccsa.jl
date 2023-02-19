@@ -77,6 +77,11 @@ function (evaluator::DualEvaluator{T})(gλ, ∇gλ, λ) where {T}
     mul!(∇gλ_all, ∇fx, δ)
     ∇gλ_all .+= fx + sum(abs2, δ ./ σ) ./ 2 .* ρ
 
+    is_dual = length(δ) > 0
+    if is_dual
+        @info "in dual evaluator" δ
+    end
+
     # Negate to turn into minimization problem
     gλ .*= -1
     ∇gλ .*= -1
@@ -158,10 +163,10 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     is_dual = (f_and_∇f isa DualEvaluator) && (length(iterate.x) == 2)
     # is_dual = length(iterate.x) == && (f_and_∇f isa DualEvaluator)
     if is_primal
-        @info "in step! of primal" iterate.x #maximum(usol - tsol) feasible=all((@view iterate.fx[2:end]) .<=
+        @info "in step! of primal" repr(iterate.x) repr(dual_optimizer.iterate.x) #maximum(usol - tsol) feasible=all((@view iterate.fx[2:end]) .<=
                                    #                                0)
     elseif is_dual
-        @info "in step! of dual" iterate.x
+        @info "in step! of dual" repr(iterate.x) repr(dual_optimizer.iterate.x)
     end
     # Check feasibility
     any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
@@ -182,27 +187,30 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         Optimize dual problem. If dual_optimizer is nothing,
         this means the problem has dimension 0.
         =#
+        is_dual && println("Solving dual dual optimizer")
         (dual_optimizer !== nothing) && solve!(dual_optimizer)
+        is_dual && println("Solved dual dual optimizer")
         dual_evaluator = dual_optimizer.f_and_∇f
         dual_iterate = dual_optimizer.iterate
 
         # Run dual evaluator at dual opt and obtain δ
+        is_dual && println("Running dual dual evaluator")
         dual_evaluator(dual_iterate.fx, dual_iterate.∇fx, dual_iterate.x)
+        is_dual && println("Ran dual dual evaluator")
         δ = dual_evaluator.buffers.δ # problem: this is 0
         iterate.Δx .= δ
 
         # Check if conservative
         iterate.gx .= iterate.fx .+ sum(abs2, δ ./ iterate.σ) / 2 .* iterate.ρ
         mul!(iterate.gx, iterate.∇fx, δ, true, true)
-
         f_and_∇f(iterate.fx, iterate.∇fx, iterate.x + δ)
         conservative = Iterators.map(>=, iterate.gx, iterate.fx)
+
         if is_primal
             @info "one primal inner iteration:" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(δ)
         elseif is_dual
             @info "one dual inner iteration" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(δ)
         end
-        break
 
         dual_iterate.ρ .= one(T) # reinitialize penality weights
         dual_iterate.σ .= one(T) # reinitialize radii of trust region
