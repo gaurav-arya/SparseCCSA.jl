@@ -27,14 +27,15 @@ function propose_Δx(optimizer::CCSAOptimizer{T}) where {T}
         # Run dual evaluator at dual opt and extract Δx from evaluator's buffer
         dual_evaluator = dual_optimizer.f_and_jac # equivalent to DualEvaluator(; iterate = optimizer.iterate, buffers=optimizer.buffers) 
         dual_iterate = dual_optimizer.iterate 
-        dual_evaluator(dual_iterate.fx, dual_iterate.jac, dual_iterate.x)
+        dual_evaluator(dual_iterate.fx, dual_iterate.jac_fx, dual_iterate.x)
         return dual_evaluator.buffers.Δx
     else
         # iterate describes a problem with m variables and 0 constraints.
         # buffers are also length m. 
         dual_dual_evaluator = DualEvaluator(; iterate = optimizer.iterate, buffers = optimizer.buffers)
         # problem: we want to fetch an iterate to feed (gλ is length 1, ∇gλ is length 0)
-        return dual_dual_evaluator(SA[one(T)], SVector{0,T}(), SVector{0,T}())
+        dual_dual_evaluator(MArray(SA[one(T)]), SVector{0,T}(), SVector{0,T}())
+        return dual_dual_evaluator.buffers.Δx
     end
 end
 
@@ -98,9 +99,10 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         proposed_Δx = propose_Δx(optimizer)
 
         # Check if conservative, by computing and comparing g and f for objective + constraints at proposed new x.
+        @show proposed_Δx
         iterate.gx .= iterate.fx .+ sum(abs2, proposed_Δx ./ iterate.σ) / 2 .* iterate.ρ
-        mul!(iterate.gx, iterate.jac, proposed_Δx, true, true)
-        f_and_jac(iterate.fx2, iterate.jac, iterate.x + proposed_Δx)
+        mul!(iterate.gx, iterate.jac_fx, proposed_Δx, true, true)
+        f_and_jac(iterate.fx2, iterate.jac_fx, iterate.x + proposed_Δx)
         conservative = Iterators.map(>=, iterate.gx, iterate.fx2)
 
         iterate.ρ[.!conservative] *= 2 # increase ρ for non-conservative convex approximations.
@@ -111,16 +113,6 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         # dual_iterate.ρ .= one(T) # reinitialize penality weights
         # dual_iterate.σ .= one(T) # reinitialize radii of trust region
         # dual_iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
-
-        if is_primal
-            @info "one primal inner iteration:" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(Δx)
-            (i == max_inner_iters) && println("could not find conservative approx for primal")
-            # if is_dual
-            #     @info "could not find conservative approx for dual" norm(Δx) norm(iterate.ρ)
-            # end
-        elseif is_dual
-            @info "one dual inner iteration" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(Δx)
-        end
     end
 
     # Update σ based on monotonicity of changes
