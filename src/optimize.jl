@@ -17,28 +17,38 @@ type whose interface is supported both by the primal optimizer and the dual opti
 """
 abstract type AbstractCCSAOptimizer end
 
+@kwdef struct OptimizerInfo{T, L}
+    iterate::Iterate{T, L}
+    buffers::DualBuffers{T}
+    max_iters::Int
+    max_inner_iters::Int
+end
 @kwdef struct DualCCSAOptimizer{T, F, L, D} <: AbstractCCSAOptimizer
     dual_iterate::Iterate{T, L}
     dual_buffers::DualBuffers{T}
-    dual_dual_buffers::DualBuffers{T}
     max_iters::Int
     max_inner_iters::Int
 end
 @kwdef struct CCSAOptimizer{T, F, L, D<:DualCCSAOptimizer} <: AbstractCCSAOptimizer
     f_and_jac::F # f(x) = (m+1, (m+1) x n linear operator)
     iterate::Iterate{T, L}
+    buffers::DualBuffers{T}
     dual_optimizer::D
     max_iters::Int
     max_inner_iters::Int
 end
 
-get_f_and_jac(optimizer::DualCCSAOptimizer) = DualEvaluator(optimizer.iterate, optimizer.buffers)
+get_iterate(optimizer::DualCCSAOptimizer) = optimizer.dual_iterate
+get_iterate(optimizer::CCSAOptimizer) = optimizer.iterate
+
+get_f_and_jac(optimizer::DualCCSAOptimizer) = DualEvaluator(optimizer.iterate, optimizer.dual_buffers) # this is wrong.
+                                                                                                # need higher iterate.
 get_f_and_jac(optimizer::CCSAOptimizer) = optimizer.f_and_jac
 
 # This function is only needed for the dual optimizer
 function evaluate_current(optimizer::DualCCSAOptimizer)
-    dual_evaluator = get_evaluator(optimizer) 
-    dual_iterate = optimizer.iterate
+    dual_evaluator = get_f_and_jac(optimizer) 
+    dual_iterate = optimizer.dual_iterate
     dual_evaluator(dual_iterate.fx, dual_iterate.jac, dual_iterate.x)
     return dual_evaluator.buffers.δ
 end
@@ -51,7 +61,8 @@ function propose_δ(optimizer::CCSAOptimizer)
 end
 
 function propose_δ(optimizer::DualCCSAOptimizer)
-
+    dual_dual_evaluator = DualEvaluator(; iterate = optimizer.dual_iterate, buffers = optimizer.dual_dual_buffers)
+    return dual_dual_evaluator(dual_iterate) #)
 end
 
 @kwdef struct Solution{T}
