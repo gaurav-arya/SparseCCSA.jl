@@ -4,4 +4,4 @@ using LinearAlgebra
 using SparseArrays
 using ForwardDiff
 
-include("rosenbrock_disk.jl")
+include("toy_problem.jl")
