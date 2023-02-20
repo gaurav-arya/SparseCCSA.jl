@@ -45,8 +45,8 @@ function propose_Δx(optimizer::CCSAOptimizer{T}) where {T}
         # the "dual dual" problem has 0 variables and 0 contraints, but running it allows us to retrieve the proposed Δx [length m].
         dual_dual_evaluator = DualEvaluator(; iterate = optimizer.iterate, buffers = optimizer.buffers)
         dual_dual_evaluator(MArray(SA[zero(T)]), SVector{0,T}(), SVector{0,T}())
-        @show dual_dual_evaluator.buffers.Δx
-        @show optimizer.iterate
+        # # @show dual_dual_evaluator.buffers.Δx
+        # @show optimizer.iterate
         return dual_dual_evaluator.buffers.Δx
     end
 end
@@ -107,7 +107,7 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     is_primal = optimizer.dual_optimizer !== nothing
 
     # Check feasibility
-    any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
+    # any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
 
     # Solve the dual problem, searching for a conservative solution. 
     local proposed_Δx
@@ -128,7 +128,7 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         if is_primal
             @info "Completed 1 primal inner iteration" repr(proposed_Δx) repr(iterate.fx2) repr(iterate.gx) repr(iterate.fx) repr(iterate.ρ) repr(collect(conservative)) repr(optimizer.dual_optimizer.iterate.x)
         else
-            @info "completed 1 dual inner iteration" repr(proposed_Δx) repr(iterate.x) repr(iterate.fx2) repr(iterate.gx) repr(iterate.ρ)
+            # @info "completed 1 dual inner iteration" repr(proposed_Δx) repr(iterate.x) repr(iterate.fx2) repr(iterate.gx) repr(iterate.ρ)
         end
 
         iterate.ρ[.!conservative] *= 2 # increase ρ for non-conservative convex approximations.
@@ -151,9 +151,9 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     iterate.ρ ./= 2
 
     if is_primal
-        @info "Completed 1 primal outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.Δx_last) repr(iterate.Δx)
+        @info "Completed 1 primal outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.jac_fx) repr(iterate.Δx_last) repr(iterate.Δx)
     else
-        @info "Completed 1 dual outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.Δx_last) repr(iterate.Δx)
+        # @info "Completed 1 dual outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.Δx_last) repr(iterate.Δx)
     end
     #=
         if norm(opt.Δx, Inf) < opt.xtol_abs
