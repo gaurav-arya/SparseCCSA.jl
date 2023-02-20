@@ -1,10 +1,8 @@
 module SparseCCSA
 
-using LazyArrays
 using LinearAlgebra
 using UnPack
 using StaticArrays
-using CatViews
 
 import Base.@kwdef
 

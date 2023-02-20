@@ -4,24 +4,17 @@ authors = ["Gaurav Arya <gauravarya272@gmail.com> and contributors"]
 version = "0.1.0"
 
 [deps]
-CatViews = "81a5f4ea-a946-549a-aa7e-2a7f63a27d31"
-ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
-LazyArrays = "5078a376-72f3-5289-bfd5-ec5146d43c02"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
-NLopt = "76087f3c-5699-56af-9a33-bf431cd00edd"
-OhMyREPL = "5fb14364-9ced-5910-84b2-373655c76a03"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
 [compat]
-CatViews = "1"
 julia = "1"
 
 [extras]
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["SparseArrays", "Test"]
+test = ["SparseArrays", "ForwardDiff", "Test"]
