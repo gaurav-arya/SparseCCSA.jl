@@ -15,78 +15,82 @@
 \section{Optimization Problem}
 Problem is
 \begin{align}
-    \min_{x \in X} f_0(x), \\
-    f_i(x) \leq 0,
+    \min_{\vec{x} \in X} f_0(\vec{x}), \\
+    f_i(\vec{x}) \leq 0,
 \end{align}
-for $i = 1, \dots, m$, where $X \subseteq \mathbb{R}^n$ is a box:
+for $i = 1, \dots, m$, where $X$ is a box:
 \begin{equation}
-    \{x \mid x_j^{\text{min}} \leq x_j \leq x_j^{\text{max}}\}.
+    \{\vec{x} \in \mathbb{R}^n \mid x_j^{\text{min}} \leq x_j \leq x_j^{\text{max}}\}.
 \end{equation}
 
 \section{Approximate Problem}
 
-Suppose $k$th iterate is $x^{(k)}$. Then, for $i = 0, \dots, m$, replace $f_i(x)$ with
+Suppose $k$th iterate is $\vec{x}^{(k)}$. Then, for $i = 0, \dots, m$, replace $f_i(\vec{x})$ with
 \begin{equation}
-    g_i(x) = f_i(x_0) + \nabla f_i(x_0) \cdot (x - x^{(k)}) + \frac{\rho_i^2}{2} \left|\frac{x - x^{(k)}}{\sigma}\right|^2,
+    g_i(\vec{x}) = f_i(\vec{x}^{(k)}) + \nabla f_i(\vec{x}^{(k)}) \cdot (\vec{x} - \vec{x}^{(k)}) + \frac{\rho_i^2}{2} \left|\frac{\vec{x} - \vec{x}^{(k)}}{\vec{\sigma}}\right|^2,
 \end{equation}
 
-where $\sigma$ and $\rho$ are vectors. And make a trust region $T$ (actually it's $T \cup X$)
+where $\vec{\sigma}$ and $\vec{\rho}$ are vectors and the division by $\vec{\sigma}$ is element-wise. And make a trust region
 \begin{equation}
-    T = \{x \mid |x_j - x_j^{(k)}| \leq \sigma_j\}.
+    T = \{\vec{x} \mid |x_j - x_j^{(k)}| \leq \sigma_j\} \cap X.
 \end{equation}
 
 So that the new problem is
 \begin{align}
-    \min_{x \in T} g_0(x), \\
-    g_i(x) \leq 0.
+    \min_{x \in T} g_0(\vec{x}), \\
+    g_i(\vec{x}) \leq 0.
 \end{align}
 
 \section{Overall Scheme}
 
-For the $k$th iteration:
+For the $k$th iteration, with current candidate $\vec{x}^{(k)}$:
 \begin{enumerate}
-    \item Solve approximate problem to find candidate $x^{(k+1)}$
-    \item Check conservative: $g_i(x^{(k+1)}) < f_i(x^{(k+1)})$.
+    \item Solve approximate problem to find candidate $\vec{x}^{(k+1)}$
+    \item Check conservative: $g_i(\vec{x}^{(k+1)}) < f_i(\vec{x}^{(k+1)})$.
     \begin{itemize}
         \item If no, throw away candidate, double $\rho_i$ for each non-conservative $g_i$, and solve approximate problem again.
     \end{itemize}
-    \item Halve $\rho$ (take bigger steps) and update $\sigma$ (decrease $\sigma_i$ if $x_i$ oscillating, increase if monotonic i.e. heading somewhere else).
+    \item Halve $\vec{\rho}$ (take bigger steps) and update $\vec{\sigma}$ (decrease $\sigma_i$ if $x_i$ oscillating, increase if monotonic i.e. heading somewhere else).
 \end{enumerate}
 
 \section{Solving approximate problem}
 
 \subsection{Evaluating dual function}
-Lagrangian relaxation, where $\lambda_0 = 1$,
+Lagrangian relaxation solves a minimization problem over the space
+\begin{equation}
+   \Lambda = \{\vec{\lambda} \in \mathbb{R}^{m+1} | \lambda_0 = 1, \lambda \geq 0\},
+\end{equation}
+with the objective
 \begin{align}
-    L(x, \lambda) &= \sum_{i=0}^m \lambda_i g_i(x)\\ 
-                  &= \sum_{i=0}^m \lambda_i f_i(x_0) + \left(\sum_{i=0}^m \lambda_i \nabla f_i(x_0)\right) \cdot (x - x^{(k)}) + \frac{1}{2} \left(\sum_{i=0}^m \lambda_i \rho_i\right) \left|\frac{x-x^{(k)}}{\sigma}\right|^2 \\
-                  &= \lambda \cdot f_i(x_0) + \sum_{j=1}^n h_j(x_j - x_j^{(k)}),
+    L(x, \vec{\lambda}) &= \sum_{i=0}^m \lambda_i g_i(\vec{x}) \\ 
+                  &= \sum_{i=0}^m \lambda_i f_i(\vec{x}^{(k)}) + \left(\sum_{i=0}^m \lambda_i \nabla f_i(\vec{x}^{(k)})\right) \cdot (\vec{x} - \vec{x}^{(k)})\\
+                  &\quad + \frac{1}{2} \left(\sum_{i=0}^m \lambda_i \rho_i\right) \left|\frac{\vec{x}-\vec{x}^{(k)}}{\vec{\sigma}}\right|^2 \\
+                  &= \vec{\lambda} \cdot \vec{f}(\vec{x}^{(k)}) + \sum_{j=1}^n h_j(x_j - x_j^{(k)}),
 \end{align}
 where
 \begin{equation}
-    h_j(\delta_j) =  \left(\lambda \cdot \nabla f(x_0)_j  \right)\delta_j + \frac{1}{2\sigma_j} (\lambda \cdot \rho) \delta_j^2.
+    h_j(\delta_j) =  \left(\vec{\lambda} \cdot \nabla f(x_0)_j  \right)\delta_j + \frac{1}{2\sigma_j} (\vec{\lambda} \cdot \vec{\rho}) \delta_j^2.
 \end{equation}
 Define dual function,
 \begin{align}
-    g(\lambda) &= \min_{x \in T} L(x, \lambda) \\
-               &= \lambda \cdot f_i(x_0) + \sum_{j=1}^n \left(\min_{|\delta_j| \leq \sigma_j}  h_j(\delta_j)\right).
+    g(\vec{\lambda}) &= \min_{x \in T} L(x, \vec{\lambda}) \\
+               &= \vec{\lambda} \cdot \vec{f}(\vec{x}^{(k)}) + \sum_{j=1}^n \left(\min_{|\delta_j| \leq \sigma_j}  h_j(\delta_j)\right).
 \end{align}
 %To evaluate, analytically minimize quadratic in $\delta_j = x_j - x_j^{(k)}$, snapping to bounds. 
-Defin for each $j$
+Define for each $j$
 \begin{align}
-    a_j &= \frac{1}{2\sigma_j^2} (\lambda \cdot \rho) 
+    a_j &= \frac{1}{2\sigma_j^2} (\vec{\lambda} \cdot \vec{\rho}) 
     \label{eq:a} \\
-    b_j &= \lambda \cdot \nabla f(x_0)_j
+    b_j &= \vec{\lambda} \cdot \nabla f(x_0)_j
     \label{eq:b}
 \end{align}
 Note that we can write
     \begin{equation}
-        b = \nabla f(x_0)^T \lambda,
+        b = \nabla f(x_0)^T \vec{\lambda}.
     \end{equation}
-    where $\nabla f(x_0)$ is a matrix.
     We now have,
 \begin{equation}
-    h_j(\delta_j) = a_j \delta_j^2 + b_j \delta_j.
+    h_j(\delta_j) = b_j \delta_j + a_j \delta_j^2.
 \end{equation}
 The minimum of $h_j(\delta_j)$ is found at
     \begin{equation}
@@ -94,33 +98,27 @@ The minimum of $h_j(\delta_j)$ is found at
     \end{equation}
 And hence we can determine 
     \begin{equation}
-        g(\lambda) = \lambda \cdot f_i(x_0) + \sum_{j=1}^n \left(a_j \delta_j^* + b_j (\delta_j^*)^2\right).
+        g(\vec{\lambda}) = \vec{\lambda} \cdot \vec{f}(\vec{x}^{(k)}) + \sum_{j=1}^n \left(b_j \delta_j^* + a_j (\delta_j^*)^2\right).
     \end{equation}
     Now let us compute the gradient. Note that,
 \begin{align}
     \frac{\partial a_j}{\partial \lambda_i} &= \frac{\rho_i}{2\sigma_j^2}, \\
-    \frac{\partial b_j}{\partial \lambda_i} &= \nabla f_i(x_0)_j.
+    \frac{\partial b_j}{\partial \lambda_i} &= \nabla f_i(\vec{x}^{(k)})_j.
 \end{align}
-If we snap to bounds, the minimum of $h_j(\lambda)$ should have gradient 0 (will have a kink, but oh well?). So let $S \subseteq \{1,\dots, m\}.$ be the indices where don't snap to bounds. Then,
+Let $S \subseteq \{1,\dots, n\}.$ be the indices where we don't snap to bounds. Then,
 \begin{align}
-    \frac{\partial g}{\partial \lambda_i} &= \sum_{j \in S} \left( -\frac{b_j}{2 a_j}  \frac{\partial b_j}{\partial \lambda_i} + \frac{b_j^2}{4 a_j^2} \frac{\partial a_j}{\partial \lambda_i}\right) \\
-         &= \sum_{j \in S} \left(-\frac{b_j}{2a_j} \nabla f_i(x_0)_j + \frac{b_j^2}{4a_j^2} \frac{\rho_i}{2\sigma_j^2} \right). 
+    \frac{\partial g}{\partial \lambda_i} &= f_i(x^{(k)}) + \sum_{j=1}^n \left(\frac{\partial b_j}{\partial \lambda_i} \delta_j^*  + \frac{\partial a_j}{\partial \lambda_i} (\delta_j^*)^2 \right) \\
+         &\quad + \sum_{j \in S} (b_j + 2a_j \delta^*_j) \frac{\partial \delta^*_j}{\partial \lambda_i} \\
+         &= f_i(x^{(k)}) + \nabla f_i(\vec{x}^{(k)}) \delta^*  + \rho_i \sum_{j=1}^n \frac{(\delta_j^*)^2}{2 \sigma_j^2}.
     \label{eq:dg}
 \end{align}
-And thus,
+In vectorial form,
     \begin{equation}
-        \frac{\partial g}{\partial \lambda} = \nabla f(x_0) v_j + \rho \sum_{j \in S} \frac{b_j^2}{8a_j^2 \sigma_j^2}.
-    \end{equation}
-    where $v_j$ is a vector satisfying
-    \begin{equation}
-        v_j = \begin{cases} 
-            \delta_j^* & \text{if }\delta_j^* \in (-\sigma_j, \sigma_j), \\
-            0 & \text{otherwise.}
-            \end{cases}
+        \frac{\partial g}{\partial \lambda} = f_i(x^{(k)}) + \nabla f(\vec{x}^{(k)}) \delta^* + \rho \sum_{j=1}^n \frac{(\delta_j^*)^2}{2 \sigma_j^2}.
     \end{equation}
 %We should evaluate $a_j$ and $b_j$ for each $j$, taking advantage of sparsity. Note that $\frac{\partial b_j}{\partial y_i}$ is also sparse. But $\frac{\partial a_j}{\partial y_i}$ is not?
 
-%Explicitltly, the first term of Equation (\ref{eq:dgdy}) has the sparsity pattern of the Jacobian transposed, while the second term is low-rank: $\frac{1}{2} \cdot$ the outer product of $\frac{1}{\bm{\sigma}}$ and $\bm{\rho}$.
+%Explicitltly, the first term of Equation (\ref{eq:dgdy}) has the sparsity pattern of the Jacobian transposed, while the second term is low-rank: $\frac{1}{2} \cdot$ the outer product of $\frac{1}{\vec{\sigma}}$ and $\vec{\rho}$.
 
 \subsection{Maximizing dual function}
 

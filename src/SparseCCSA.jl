@@ -1,7 +1,14 @@
 module SparseCCSA
-using CatViews
+
 using LinearAlgebra
-export CCSAState
-export optimize
-include("ccsa.jl")
+using UnPack
+using StaticArrays
+
+import Base.@kwdef
+
+export init, solve!, step!, reinit!
+
+include("dual.jl")
+include("optimize.jl")
+
 end
