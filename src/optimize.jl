@@ -86,50 +86,31 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     @unpack f_and_jac, iterate, dual_optimizer, max_inner_iters = optimizer
     iterate.Δx_last .= iterate.Δx
 
-    is_primal = !(f_and_jac isa DualEvaluator)
-    is_dual = (f_and_jac isa DualEvaluator) && (length(iterate.x) == 2)
-    # is_dual = length(iterate.x) == && (f_and_jac isa DualEvaluator)
-    if is_primal
-        @info "in step! of primal" repr(iterate.x) repr(dual_optimizer.iterate.x) #maximum(usol - tsol) feasible=all((@view iterate.fx[2:end]) .<=
-                                   #                                0)
-    elseif is_dual
-        @info "in step! of dual" repr(iterate.x) repr(dual_optimizer.iterate.x)
-    end
     # Check feasibility
     any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
 
     # Solve the dual problem, searching for a conservative solution. 
     for i in 1:max_inner_iters
-        # As shown here, the dual_optimizer's evaluator has a reference to our iterate.
-        # TODO: aliasing can be a bit trricky, so either document assumption explicitly
-        # (that dual_optimizer implicitly depends on CCSAOptimizer's iterate), or change design.
-        @assert iterate == dual_optimizer.f_and_jac.iterate
-
         #= 
         Optimize dual problem. If dual_optimizer is nothing,
         this means the problem has no constraints (the dual problem has 0 constraints). 
         =#
-        # Consider the below line in case where we're calling the dual_dual_optimizer (i.e. we're in the dual here). 
-        # Why do we do it?
+        proposed_Δx = propose_Δx(optimizer)
 
-        # Check if conservative
-        # TODO: can this be retrieved from dual evaluator?
-        # No, because it doesn't do the linear combinations.
-        # BUG: need to negate gx since negated by evaluator. No, this is fine...
-        iterate.gx .= iterate.fx .+ sum(abs2, Δx ./ iterate.σ) / 2 .* iterate.ρ
-        mul!(iterate.gx, iterate.jac, Δx, true, true)
-        f_and_jac(iterate.fx2, iterate.jac, iterate.x + Δx)
+        # Check if conservative, by computing and comparing g and f for objective + constraints at proposed new x.
+        iterate.gx .= iterate.fx .+ sum(abs2, proposed_Δx ./ iterate.σ) / 2 .* iterate.ρ
+        mul!(iterate.gx, iterate.jac, proposed_Δx, true, true)
+        f_and_jac(iterate.fx2, iterate.jac, iterate.x + proposed_Δx)
         conservative = Iterators.map(>=, iterate.gx, iterate.fx2)
 
-        iterate.ρ[.!conservative] *= 2 # increase ρ until achieving conservative approximation
+        iterate.ρ[.!conservative] *= 2 # increase ρ for non-conservative convex approximations.
 
         # Reinitialize dual_iterate (what's changed? iterate's ρ has changed, and thus dual_evaluator.)
-        # TODO: should this reiniitalization occur elsewhere? (E.g. as part of solve! ?)
-        # Also, should this reiniitalization occur at all?
-        dual_iterate.ρ .= one(T) # reinitialize penality weights
-        dual_iterate.σ .= one(T) # reinitialize radii of trust region
-        dual_iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
-        dual_evaluator(dual_iterate.fx, dual_iterate.jac, dual_iterate.x)
+        # TODO: should this reinitalization occur elsewhere? (E.g. as part of solve!, as is already done for x, fx ?)
+        # Also, should this reiniitalization occur at all? (could it be useful to "remember" σ/ρ/x used previously?)
+        # dual_iterate.ρ .= one(T) # reinitialize penality weights
+        # dual_iterate.σ .= one(T) # reinitialize radii of trust region
+        # dual_iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
 
         if is_primal
             @info "one primal inner iteration:" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(Δx)
@@ -170,9 +151,9 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
 end
 
 function solve!(optimizer::CCSAOptimizer)
-    # Initialize objective and gradient (TODO: should this move into step! ?)
+    # Initialize objective and gradient
     iterate = optimizer.iterate
-    optimizer.f_and_jac(iterate.fx, iterate.jac, iterate.x)
+    optimizer.f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
 
     # TODO: catch stopping conditions in opt and exit here
     for i in 1:(optimizer.max_iters)
