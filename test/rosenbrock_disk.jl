@@ -27,7 +27,7 @@ fx
 
 # TODO: init_iterate is really mostly for initializing the type, abusing here to get the right values.
 f_and_jac(fx, jac, zeros(n))
-iterate = SparseCCSA.init_iterate(; n, m, x0 = zeros(2), jac_prototype = jac, lb=[-Inf, -Inf], ub=[Inf, Inf])    
+iterate = SparseCCSA.init_iterate(; n, m, x0 = zeros(2), jac_fx_prototype = jac, lb=[-Inf, -Inf], ub=[Inf, Inf])    
 iterate.fx .= fx
 buffers = SparseCCSA.init_buffers(; T=Float64, n)
 dual_evaluator = SparseCCSA.DualEvaluator(; iterate, buffers)

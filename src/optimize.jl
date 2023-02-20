@@ -54,7 +54,7 @@ function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters
     # x0 = (x0 === nothing) ? zeros(n) : copy(x0)
 
     # Setup primal iterate, with n variables and m constraints
-    iterate = init_iterate(; n, m, x0, jac_fx_prototype = copy(jac_prototype), lb, ub)
+    iterate = init_iterate(; n, m, x0, jac_prototype = copy(jac_prototype), lb, ub)
     buffers = init_buffers(; n, m, T)
 
     # Setup dual iterate, with m variables and 0 constraints

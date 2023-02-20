@@ -17,8 +17,8 @@ iterate, which is sufficient to specify the dual problem.
     fx2::Vector{T} # (m+1) x 1 values of approximate objective and constraints
 end
 
-function init_iterate(; n, m, x0::Vector{T}, jac_fx_prototype, lb, ub) where {T}
-    return Iterate(; x = x0, fx = zeros(T, m + 1), jac_fx = jac_fx_prototype, ρ = ones(T, m + 1),
+function init_iterate(; n, m, x0::Vector{T}, jac_prototype, lb, ub) where {T}
+    return Iterate(; x = x0, fx = zeros(T, m + 1), jac_fx = jac_prototype, ρ = ones(T, m + 1),
                    σ = ones(T, n), lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n), 
                    gx = zeros(T, m + 1), fx2 = zeros(T, m + 1))
 end
@@ -28,7 +28,7 @@ Instantiates the iterate structure for a dual problem with m constraints.
 """
 function init_iterate_for_dual(; m, T)
     return init_iterate(; n = m, m = 0, x0 = zeros(T, m),
-                        jac_fx_prototype = zeros(T, 1, m), lb = zeros(m),
+                        jac_prototype = zeros(T, 1, m), lb = zeros(m),
                         ub = fill(typemax(T), m))
 end
 
