@@ -11,8 +11,8 @@ iterate, which is sufficient to specify the dual problem.
     lb::Vector{T} # n x 1 lower bounds on solution
     ub::Vector{T} # n x 1 upper bounds on solution
     # Below are buffers used by inner iteration logic. TODO: move into separate struct, defined in optimize.jl?
-    Δx::Vector{T} # n x 1 xᵏ⁺¹ - xᵏ
-    Δx_last::Vector{T} # n x 1 xᵏ - xᵏ⁻¹
+    Δxx::Vector{T} # n x 1 xᵏ⁺¹ - xᵏ
+    Δxx_last::Vector{T} # n x 1 xᵏ - xᵏ⁻¹
     gx::Vector{T} # (m+1) x 1 values of approximate objective and constraints
     fx2::Vector{T} # (m+1) x 1 values of approximate objective and constraints
 end
@@ -20,7 +20,7 @@ end
 function init_iterate(; n, m, x0::Vector{T}, jac_prototype, lb, ub) where {T}
     return Iterate(; x = x0, fx = zeros(T, m + 1), jac = jac_prototype, ρ = ones(T, m + 1),
                    σ = ones(T, n),
-                   lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n), gx = zeros(T, m + 1), fx2 = zeros(T, m + 1))
+                   lb, ub, Δxx = zeros(T, n), Δxx_last = zeros(T, n), gx = zeros(T, m + 1), fx2 = zeros(T, m + 1))
 end
 
 """
@@ -38,7 +38,7 @@ Mutable buffers used by the dual optimization algorithm.
 @kwdef struct DualBuffers{T}
     a::Vector{T} # n x 1 buffer
     b::Vector{T} # n x 1 buffer
-    δ::Vector{T} # n x 1 buffer
+    Δx::Vector{T} # n x 1 buffer
 end
 
 function init_buffers(; T, n)
@@ -58,30 +58,30 @@ end
 
 Set the dual gradient ∇gλ and dual objective gλ
 in-place to their new values at λ.
-The internal dual buffer δ is also set so that
-xᵏ + δ is the optimal primal.
+The internal dual buffer Δx is also set so that
+xᵏ + Δx is the optimal primal.
 Shapes: ∇gλ and λ are m-length, gλ is 1-length.
 (Note: negated use of g)
 """
-function (evaluator::DualEvaluator{T})(gλ, ∇gλ, λ) where {T}
-    @unpack σ, ρ, x, fx, jac, lb, ub = evaluator.iterate
-    @unpack a, b, δ = evaluator.buffers
-    λ_all = CatView([one(T)], λ)
-    ∇gλ_all = CatView([one(T)], ∇gλ)
+function (evaluator::DualEvaluator{T})(gλ, gjacλ, λ) where {T}
+    @unpack σ, ρ, x, fx, fjac, lb, ub = evaluator.iterate
+    @unpack a, b, Δx = evaluator.buffers
+    λ_all = ApplyArray(vcat, SA[one(T)], λ) # lazy concatenate
+    gjacλ_all = ApplyArray(vcat, SA[one(T)], gjacλ)
 
     a .= dot(λ_all, ρ) ./ (2 .* σ .^ 2)
-    mul!(b, jac', λ_all)
-    @. δ = clamp(-b / (2 * a), -σ, σ)
-    @. δ = clamp(δ, lb - x, ub - x)
-    gλ[1] = dot(λ_all, fx) + sum(@. a * δ^2 + b * δ)
+    mul!(b, fjac', λ_all)
+    @. Δx = clamp(-b / (2 * a), -σ, σ)
+    @. Δx = clamp(Δx, lb - x, ub - x)
+    gλ[1] = dot(λ_all, fx) + sum(@. a * Δx^2 + b * Δx)
     # Below we populate ∇gλ_all, i.e. the gradient WRT λ_0, ..., λ_m,
     # although we ultimately don't care abuot the first entry.
-    mul!(∇gλ_all, jac, δ)
-    ∇gλ_all .+= fx + sum(abs2, δ ./ σ) ./ 2 .* ρ
+    mul!(∇gλ_all, fjac, Δx)
+    gjacλ_all .+= fx + sum(abs2, Δx ./ σ) ./ 2 .* ρ
 
     # Negate to turn into minimization problem
     gλ .*= -1
-    ∇gλ .*= -1
+    gjacλ .*= -1
 
     return nothing
 end

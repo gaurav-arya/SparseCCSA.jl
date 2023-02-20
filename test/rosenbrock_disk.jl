@@ -38,7 +38,7 @@ gλ = zeros(1)
 dual_evaluator(gλ, ∇gλ, λ)
 gλ
 ∇gλ
-dual_evaluator.buffers.δ
+dual_evaluator.buffers.Δx
 
 ## Solve optimization problem
 

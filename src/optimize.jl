@@ -7,30 +7,14 @@
 =#
 
 """
-Because we call CCSA recursively to solve the dual problem, we define an AbstractCCSAOptimizer
-type whose interface is supported both by the primal optimizer and the dual optimizer. Interface:
+Interface:
 
-- max_iters, max_inner_iters fields
-- get_iterate
-- propose_δ
+- iterate, max_iters, max_inner_iters fields
+- propose_Δx
 - evaluate_current (only for dual optimizer?)
 """
-abstract type AbstractCCSAOptimizer end
-
-@kwdef struct OptimizerInfo{T, L}
-    iterate::Iterate{T, L}
-    buffers::DualBuffers{T}
-    max_iters::Int
-    max_inner_iters::Int
-end
-@kwdef struct DualCCSAOptimizer{T, F, L, D} <: AbstractCCSAOptimizer
-    dual_iterate::Iterate{T, L}
-    dual_buffers::DualBuffers{T}
-    max_iters::Int
-    max_inner_iters::Int
-end
 @kwdef struct CCSAOptimizer{T, F, L, D<:DualCCSAOptimizer} <: AbstractCCSAOptimizer
-    f_and_jac::F # f(x) = (m+1, (m+1) x n linear operator)
+    f_and_fjac::F # f(x) = (m+1, (m+1) x n linear operator)
     iterate::Iterate{T, L}
     buffers::DualBuffers{T}
     dual_optimizer::D
@@ -38,31 +22,23 @@ end
     max_inner_iters::Int
 end
 
-get_iterate(optimizer::DualCCSAOptimizer) = optimizer.dual_iterate
-get_iterate(optimizer::CCSAOptimizer) = optimizer.iterate
-
-get_f_and_jac(optimizer::DualCCSAOptimizer) = DualEvaluator(optimizer.iterate, optimizer.dual_buffers) # this is wrong.
-                                                                                                # need higher iterate.
-get_f_and_jac(optimizer::CCSAOptimizer) = optimizer.f_and_jac
-
-# This function is only needed for the dual optimizer
-function evaluate_current(optimizer::DualCCSAOptimizer)
-    dual_evaluator = get_f_and_jac(optimizer) 
-    dual_iterate = optimizer.dual_iterate
-    dual_evaluator(dual_iterate.fx, dual_iterate.jac, dual_iterate.x)
-    return dual_evaluator.buffers.δ
-end
-
-function propose_δ(optimizer::CCSAOptimizer)
-    dual_optimizer = optimizer.dual_optimizer
-    solve!(dual_optimizer)
-    # Run dual evaluator at dual opt and obtain δ
-    return evaluate_current(dual_optimizer)
-end
-
-function propose_δ(optimizer::DualCCSAOptimizer)
-    dual_dual_evaluator = DualEvaluator(; iterate = optimizer.dual_iterate, buffers = optimizer.dual_dual_buffers)
-    return dual_dual_evaluator(dual_iterate) #)
+function propose_Δx(optimizer::CCSAOptimizer{T}) where {T}
+    if optimizer.dual_optimizer !== nothing
+        dual_optimizer = optimizer.dual_optimizer
+        solve!(dual_optimizer)
+        # Run dual evaluator at dual opt and extract Δx from evaluator's buffer
+        dual_evaluator = dual_optimizer.f_and_fjac # DualEvaluator(; iterate = optimizer.iterate, buffers=optimizer.buffers) 
+        dual_iterate = dual_optimizer.iterate 
+        # lengths 1, m, and m below...
+        dual_evaluator(dual_iterate.fx, dual_iterate.jac, dual_iterate.x)
+        return dual_evaluator.buffers.Δx
+    else
+        # iterate describes a problem with m variables and 0 constraints.
+        # buffers are also length m. 
+        dual_dual_evaluator = DualEvaluator(; iterate = optimizer.iterate, buffers = optimizer.buffers)
+        # problem: we want to fetch an iterate to feed (gλ is length 1, ∇gλ is length 0)
+        return dual_dual_evaluator(SA[one(T)], SVector{0,T}(), SVector{0,T}())
+    end
 end
 
 @kwdef struct Solution{T}
@@ -76,7 +52,7 @@ Free to allocate here.
 """
 # TODO: defaults for kwargs below
 # TODO: implement init recursively
-function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters,
+function init(f_and_fjac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters,
               max_dual_iters, max_dual_inner_iters, jac_prototype) where {T}
     # x0 = (x0 === nothing) ? zeros(n) : copy(x0)
 
@@ -84,10 +60,8 @@ function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters
     iterate = init_iterate(; n, m, x0, jac_prototype = copy(jac_prototype), lb, ub)
 
     # Setup dual iterate, with m variables and 0 constraints
-    # dual_evaluator = DualEvaluator(; iterate, buffers = init_buffers(; T, n))
+    dual_evaluator = DualEvaluator(; iterate, buffers = init_buffers(; T, n))
     dual_iterate = init_iterate_for_dual(; m, T)
-
-    dual_optimizer = DualCCSAOptimizer(; )
 
     # Setup optimizers
     dual_optimizer = CCSAOptimizer(; f_and_jac = dual_evaluator, iterate = dual_iterate,
@@ -111,7 +85,7 @@ What are the invariants / contracts?
 """
 function step!(optimizer::CCSAOptimizer{T}) where {T}
     @unpack f_and_jac, iterate, dual_optimizer, max_inner_iters = optimizer
-    iterate.Δx_last .= iterate.Δx
+    iterate.Δxx_last .= iterate.Δxx
 
     is_primal = !(f_and_jac isa DualEvaluator)
     is_dual = (f_and_jac isa DualEvaluator) && (length(iterate.x) == 2)
@@ -142,18 +116,18 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
             solve!(dual_optimizer)
             dual_evaluator = dual_optimizer.f_and_jac
             dual_iterate = dual_optimizer.iterate
-            # Run dual evaluator at dual opt and obtain δ
+            # Run dual evaluator at dual opt and obtain Δx
             dual_evaluator(dual_iterate.fx, dual_iterate.jac, dual_iterate.x)
-            δ = dual_evaluator.buffers.δ
-            iterate.Δx .= δ
+            Δx = dual_evaluator.buffers.Δx
+            iterate.Δxx .= Δx
 
         # Check if conservative
         # TODO: can this be retrieved from dual evaluator?
         # No, because it doesn't do the linear combinations.
         # BUG: need to negate gx since negated by evaluator. No, this is fine...
-        iterate.gx .= iterate.fx .+ sum(abs2, δ ./ iterate.σ) / 2 .* iterate.ρ
-        mul!(iterate.gx, iterate.jac, δ, true, true)
-        f_and_jac(iterate.fx2, iterate.jac, iterate.x + δ)
+        iterate.gx .= iterate.fx .+ sum(abs2, Δx ./ iterate.σ) / 2 .* iterate.ρ
+        mul!(iterate.gx, iterate.jac, Δx, true, true)
+        f_and_jac(iterate.fx2, iterate.jac, iterate.x + Δx)
         conservative = Iterators.map(>=, iterate.gx, iterate.fx2)
 
         iterate.ρ[.!conservative] *= 2 # increase ρ until achieving conservative approximation
@@ -167,37 +141,37 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         dual_evaluator(dual_iterate.fx, dual_iterate.jac, dual_iterate.x)
 
         if is_primal
-            @info "one primal inner iteration:" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(δ)
+            @info "one primal inner iteration:" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(Δx)
             (i == max_inner_iters) && println("could not find conservative approx for primal")
             # if is_dual
-            #     @info "could not find conservative approx for dual" norm(δ) norm(iterate.ρ)
+            #     @info "could not find conservative approx for dual" norm(Δx) norm(iterate.ρ)
             # end
         elseif is_dual
-            @info "one dual inner iteration" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(δ)
+            @info "one dual inner iteration" all(conservative) repr(iterate.gx) repr(iterate.fx) repr(Δx)
         end
     end
 
     # Update σ based on monotonicity of changes
-    map!((σ, Δx, Δx_last) -> sign(Δx) == sign(Δx_last) ? 2σ : σ / 2, iterate.σ, iterate.σ,
-         iterate.Δx, iterate.Δx_last)
+    map!((σ, Δxx, Δxx_last) -> sign(Δxx) == sign(Δxx_last) ? 2σ : σ / 2, iterate.σ, iterate.σ,
+         iterate.Δxx, iterate.Δxx_last)
     # Halve ρ (be less conservative)
     iterate.ρ ./= 2
-    iterate.x .+= iterate.Δx
-    iterate.Δx_last .= iterate.Δx
+    iterate.x .+= iterate.Δxx
+    iterate.Δxx_last .= iterate.Δxx
     #=
-        if norm(opt.Δx, Inf) < opt.xtol_abs
+        if norm(opt.Δxx, Inf) < opt.xtol_abs
             opt.RET = :XTOL_ABS
             return
         end
-        if norm(opt.Δx, Inf) / norm(opt.x, Inf)  < opt.xtol_rel
+        if norm(opt.Δxx, Inf) / norm(opt.x, Inf)  < opt.xtol_rel
             opt.RET = :XTOL_REL
             return
         end
-        if norm(Δf, Inf) < opt.ftol_abs
+        if norm(Δxf, Inf) < opt.ftol_abs
             opt.RET = :FTOL_REL
             return
         end
-        if norm(Δf, Inf) / norm(f, Inf) < opt.ftol_rel
+        if norm(Δxf, Inf) / norm(f, Inf) < opt.ftol_rel
             opt.RET = :FTOL_REL
             return
         end
