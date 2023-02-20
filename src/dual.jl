@@ -14,15 +14,15 @@ iterate, which is sufficient to specify the dual problem.
     Δx::Vector{T} # n x 1 xᵏ⁺¹ - xᵏ
     Δx_last::Vector{T} # n x 1 xᵏ - xᵏ⁻¹
     gx::Vector{T} # (m+1) x 1 values of approximate objective and constraints
-    x2::Vector{T}
-    fx2::Vector{T} # (m+1) x 1 values of approximate objective and constraints
-    jac_fx2::L # (m+1) x 1 values of approximate objective and constraints
+    x_proposed::Vector{T}
+    Δx_proposed::Vector{T}
+    fx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints
 end
 
 function init_iterate(; n, m, x0::Vector{T}, jac_prototype, lb, ub) where {T}
     return Iterate(; x = x0, fx = zeros(T, m + 1), jac_fx = copy(jac_prototype), ρ = ones(T, m + 1),
                    σ = ones(T, n), lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n), 
-                   gx = zeros(T, m + 1), x2 = zeros(T, n), fx2 = zeros(T, m + 1), jac_fx2 = copy(jac_prototype))
+                   gx = zeros(T, m + 1), x_proposed = zeros(T, n), Δx_proposed = zeros(T, n), fx_proposed = zeros(T, m + 1))
 end
 
 """
@@ -70,20 +70,22 @@ function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ) where {T}
     # We have special (m+1)-length buffers for this, which is a little wasteful. 
     λ_all[1] = 1 
     λ_all[2:end] .= λ
-    grad_gλ_all .= 0
 
     a .= dot(λ_all, ρ) ./ (2 .* σ .^ 2)
     mul!(b, jac_fx', λ_all)
     @. Δx = clamp(-b / (2 * a), -σ, σ)
     @. Δx = clamp(Δx, lb - x, ub - x)
-    neg_gλ[1] = -1 * (dot(λ_all, fx) + sum(@. a * Δx^2 + b * Δx))
-    # Below we populate grad_gλ_all, i.e. the gradient WRT λ_0, ..., λ_m,
-    # although we ultimately don't care about the first entry.
-    mul!(grad_gλ_all, jac_fx, Δx)
-    grad_gλ_all .+= fx + sum(abs2, Δx ./ σ) ./ 2 .* ρ
 
-    # Negate to turn into minimization problem
-    neg_grad_gλ .= -1 * @view grad_gλ_all[2:end]
+    if neg_grad_gλ !== nothing
+        # Below we populate grad_gλ_all, i.e. the gradient WRT λ_0, ..., λ_m,
+        # although we ultimately don't care about the first entry.
+        grad_gλ_all .= 0
+        mul!(grad_gλ_all, jac_fx, Δx)
+        grad_gλ_all .+= fx + sum(abs2, Δx ./ σ) ./ 2 .* ρ
+        neg_grad_gλ .= -1 * @view grad_gλ_all[2:end]
+    end
+
+    neg_gλ[1] = -1 * (dot(λ_all, fx) + sum(@. a * Δx^2 + b * Δx))
 
     return nothing
 end

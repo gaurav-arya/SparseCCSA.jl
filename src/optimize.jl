@@ -20,7 +20,7 @@ Interface:
     max_inner_iters::Int
 end
 
-function propose_Δx(optimizer::CCSAOptimizer{T}) where {T}
+function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}) where {T}
     if optimizer.dual_optimizer !== nothing
         dual_optimizer = optimizer.dual_optimizer
         solve!(dual_optimizer)
@@ -30,6 +30,7 @@ function propose_Δx(optimizer::CCSAOptimizer{T}) where {T}
         # Run dual evaluator at dual opt and extract Δx from evaluator's buffer
         dual_iterate = dual_optimizer.iterate 
         dual_evaluator(dual_iterate.fx, dual_iterate.jac_fx, dual_iterate.x)
+        Δx .= dual_evaluator.buffers.Δx 
 
         # Reinitialize dual_iterate (what's changed? iterate's ρ has changed, and thus dual_evaluator.)
         # TODO: should this reinitalization occur elsewhere? (E.g. as part of solve!, as is already done for x, fx ?)
@@ -40,14 +41,14 @@ function propose_Δx(optimizer::CCSAOptimizer{T}) where {T}
         dual_iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
         dual_evaluator(dual_iterate.fx, dual_iterate.jac_fx, dual_iterate.x)
 
-        return dual_evaluator.buffers.Δx
+        return nothing
     else
         # the "dual dual" problem has 0 variables and 0 contraints, but running it allows us to retrieve the proposed Δx [length m].
         dual_dual_evaluator = DualEvaluator(; iterate = optimizer.iterate, buffers = optimizer.buffers)
         dual_dual_evaluator(MArray(SA[zero(T)]), SVector{0,T}(), SVector{0,T}())
-        # # @show dual_dual_evaluator.buffers.Δx
-        # @show optimizer.iterate
-        return dual_dual_evaluator.buffers.Δx
+        Δx .= dual_dual_evaluator.buffers.Δx
+
+        return nothing
     end
 end
 
@@ -109,27 +110,26 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     # any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
 
     # Solve the dual problem, searching for a conservative solution. 
-    local proposed_Δx
     for i in 1:max_inner_iters
         #= 
         Optimize dual problem. If dual_optimizer is nothing,
         this means the problem has no constraints (the dual problem has 0 constraints). 
         =#
-        proposed_Δx = propose_Δx(optimizer)
+        propose_Δx!(iterate.Δx_proposed, optimizer)
 
         # Compute conservative approximation g at proposed point.
-        iterate.gx .= iterate.fx .+ sum(abs2, proposed_Δx ./ iterate.σ) / 2 .* iterate.ρ
-        mul!(iterate.gx, iterate.jac_fx, proposed_Δx, true, true)
+        iterate.gx .= iterate.fx .+ sum(abs2, iterate.Δx_proposed ./ iterate.σ) / 2 .* iterate.ρ
+        mul!(iterate.gx, iterate.jac_fx, iterate.Δx_proposed, true, true)
         # Compute f at proposed point. TODO: don't need jac here, only f
-        iterate.x2 .= iterate.x + proposed_Δx
-        f_and_jac(iterate.fx2, iterate.jac_fx2, iterate.x2)
+        iterate.x_proposed .= iterate.x + iterate.Δx_proposed 
+        f_and_jac(iterate.fx_proposed, nothing, iterate.x_proposed)
         # Check if conservative
-        conservative = Iterators.map(>=, iterate.gx, iterate.fx2)
+        conservative = Iterators.map(>=, iterate.gx, iterate.fx_proposed)
 
         if is_primal
-            @info "Completed 1 primal inner iteration" repr(proposed_Δx) repr(iterate.fx2) repr(iterate.gx) repr(iterate.fx) repr(iterate.ρ) repr(collect(conservative)) repr(optimizer.dual_optimizer.iterate.x)
+            @info "Completed 1 primal inner iteration" repr(iterate.Δx_proposed) repr(iterate.fx_proposed) repr(iterate.gx) repr(iterate.fx) repr(iterate.ρ) repr(collect(conservative)) repr(optimizer.dual_optimizer.iterate.x)
         else
-            # @info "completed 1 dual inner iteration" repr(proposed_Δx) repr(iterate.x) repr(iterate.fx2) repr(iterate.gx) repr(iterate.ρ)
+            # @info "completed 1 dual inner iteration" repr(iterate.Δx_proposed) repr(iterate.x) repr(iterate.fx_proposed) repr(iterate.gx) repr(iterate.ρ)
         end
 
         iterate.ρ[.!conservative] *= 2 # increase ρ for non-conservative convex approximations.
@@ -143,7 +143,7 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
 
     # Update iterate
     iterate.Δx_last .= iterate.Δx
-    iterate.Δx .= proposed_Δx
+    iterate.Δx .= iterate.Δx_proposed 
     iterate.x .+= iterate.Δx
     f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
     # Update σ based on monotonicity of changes

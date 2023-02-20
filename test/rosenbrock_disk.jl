@@ -11,7 +11,9 @@ end
 
 function f_and_jac(fx, jac, x)
     fx .= f(x)
-    jac .= ForwardDiff.jacobian(f, x)
+    if jac !== nothing
+        jac .= ForwardDiff.jacobian(f, x)
+    end
     nothing
 end
 
