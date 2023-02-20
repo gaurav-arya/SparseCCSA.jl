@@ -28,7 +28,7 @@ jac
 
 opt = init(f_and_jac, fill(typemin(0.0), 2), fill(typemax(0.0), 2), n, m; x0 = [0.5, 0.5], max_iters = 5,
            max_inner_iters = 10,
-           max_dual_iters = 20, max_dual_inner_iters = 3, jac_prototype = zeros(m + 1, n));
+           max_dual_iters = 20, max_dual_inner_iters = 10, jac_prototype = zeros(m + 1, n));
 
 dual_optimizer = opt.dual_optimizer
 dual_evaluator = dual_optimizer.f_and_jac
@@ -44,4 +44,14 @@ lines(1:50, [evaluate_dual(i)[1][1] for i in 1:50])
 
 ## Expected minimum = 29. Can we get there? Yes!
 
+dual_optimizer.iterate.ρ[1] = 2e17
+dual_optimizer.iterate.σ[1] = 1e9
+
 step!(dual_optimizer)
+
+## Now let's try the original optimization
+
+
+# opt.f_and_jac(opt.iterate.fx2, opt.iterate.jac_fx2, opt.iterate.x .+ [0.01,0.01])
+# opt.iterate.fx2
+step!(opt)
