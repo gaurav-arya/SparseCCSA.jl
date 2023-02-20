@@ -130,7 +130,7 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         is_primal && @info "Completed 1 $str inner iteration" repr(iterate.Δx_proposed) repr(iterate.x) repr(iterate.x_proposed) repr(iterate.fx_proposed) repr(iterate.gx_proposed) repr(iterate.fx) repr(iterate.ρ) repr(collect(conservative))
 
         # Increase ρ for non-conservative convex approximations.
-        iterate.ρ[.!conservative] .= min(iterate.ρ[.!conservative], )
+        iterate.ρ[.!conservative] .*= 2 
 
         if all(conservative) || (i == max_inner_iters)
             !all(conservative) && @info "Could not find conservative approx for $str"
