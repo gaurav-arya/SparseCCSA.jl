@@ -97,6 +97,7 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
 
     # Solve the dual problem, searching for a conservative solution. 
+    local proposed_Δx
     for i in 1:max_inner_iters
         #= 
         Optimize dual problem. If dual_optimizer is nothing,
@@ -115,12 +116,13 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
             @info "Completed 1 primal inner iteration" repr(proposed_Δx) repr(iterate.fx2) repr(iterate.gx) repr(iterate.fx) repr(collect(conservative))
         end
 
-        all(conservative) && break
         iterate.ρ[.!conservative] *= 2 # increase ρ for non-conservative convex approximations.
 
-        if is_primal && i == max_inner_iters
-            @info "Could not find conservative approx for primal"
+        if all(conservative) || (i == max_inner_iters)
+            (i == max_inner_iters) && @info "Could not find conservative approx for primal"
+            break
         end
+
         # Reinitialize dual_iterate (what's changed? iterate's ρ has changed, and thus dual_evaluator.)
         # TODO: should this reinitalization occur elsewhere? (E.g. as part of solve!, as is already done for x, fx ?)
         # Also, should this reiniitalization occur at all? (could it be useful to "remember" σ/ρ/x used previously?)
@@ -129,13 +131,16 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         # dual_iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
     end
 
+    # Update iterate
+    iterate.Δx_last .= iterate.Δx
+    iterate.Δx .= proposed_Δx
+    iterate.x .+= iterate.Δx
+    f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
     # Update σ based on monotonicity of changes
     map!((σ, Δx, Δx_last) -> sign(Δx) == sign(Δx_last) ? 2σ : σ / 2, iterate.σ, iterate.σ,
          iterate.Δx, iterate.Δx_last)
     # Halve ρ (be less conservative)
     iterate.ρ ./= 2
-    iterate.x .+= iterate.Δx
-    iterate.Δx_last .= iterate.Δx
     #=
         if norm(opt.Δx, Inf) < opt.xtol_abs
             opt.RET = :XTOL_ABS
