@@ -20,9 +20,11 @@ iterate, which is sufficient to specify the dual problem.
 end
 
 function init_iterate(; n, m, x0::Vector{T}, jac_prototype, lb, ub) where {T}
-    return Iterate(; x = x0, fx = zeros(T, m + 1), jac_fx = copy(jac_prototype), ρ = ones(T, m + 1),
-                   σ = ones(T, n), lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n), 
-                   gx_proposed = zeros(T, m + 1), x_proposed = zeros(T, n), Δx_proposed = zeros(T, n), fx_proposed = zeros(T, m + 1))
+    return Iterate(; x = x0, fx = zeros(T, m + 1), jac_fx = copy(jac_prototype),
+                   ρ = ones(T, m + 1),
+                   σ = ones(T, n), lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n),
+                   gx_proposed = zeros(T, m + 1), x_proposed = zeros(T, n),
+                   Δx_proposed = zeros(T, n), fx_proposed = zeros(T, m + 1))
 end
 
 """
@@ -45,7 +47,9 @@ Mutable buffers used by the dual optimization algorithm.
     grad_gλ_all::Vector{T} # (m + 1) x 1 buffer
 end
 
-init_buffers(; n, m, T) = DualBuffers(zeros(T, n), zeros(T, n), zeros(T, n), zeros(T, m + 1), zeros(T, m + 1))
+function init_buffers(; n, m, T)
+    DualBuffers(zeros(T, n), zeros(T, n), zeros(T, n), zeros(T, m + 1), zeros(T, m + 1))
+end
 init_buffers_for_dual(; m, T) = init_buffers(; n = m, m = 0, T)
 
 """
@@ -68,7 +72,7 @@ function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ) where {T}
     @unpack a, b, Δx, λ_all, grad_gλ_all = evaluator.buffers
     # The dual evaluation turns out to be simpler to express with λ_{1...m} left-augmented by λ_0 = 1.
     # We have special (m+1)-length buffers for this, which is a little wasteful. 
-    λ_all[1] = 1 
+    λ_all[1] = 1
     λ_all[2:end] .= λ
 
     a .= dot(λ_all, ρ) ./ (2 .* σ .^ 2)

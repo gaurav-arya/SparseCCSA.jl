@@ -17,7 +17,7 @@ n = 2
 m = 2
 
 fx = zeros(m + 1)
-jac = zeros(m+1, n)
+jac = zeros(m + 1, n)
 f_and_jac(fx, jac, zeros(n))
 fx
 jac
@@ -27,8 +27,11 @@ jac
 # Form optimizer
 opt = init(f_and_jac, [0.0, 0.0], [100.0, 100.0], n, m; x0 = [1.0, 1.0], max_iters = 5,
            max_inner_iters = 5,
-          max_dual_iters = 2, max_dual_inner_iters = 5, jac_prototype = zeros(m + 1, n));
-try step!(opt) catch e end
+           max_dual_iters = 2, max_dual_inner_iters = 5, jac_prototype = zeros(m + 1, n));
+try
+    step!(opt)
+catch e
+end
 step!(opt)
 
 opt.iterate.x

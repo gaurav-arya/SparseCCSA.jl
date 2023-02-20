@@ -35,17 +35,18 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}) where {T}
         # but since we have already formed it for the dual optimizer we just retrieve it here.  
         dual_evaluator = dual_optimizer.f_and_jac
         # Run dual evaluator at dual opt and extract Δx from evaluator's buffer
-        dual_iterate = dual_optimizer.iterate 
+        dual_iterate = dual_optimizer.iterate
         dual_evaluator(dual_iterate.fx, dual_iterate.jac_fx, dual_iterate.x)
         @show dual_iterate.x sol.x
 
-        Δx .= dual_evaluator.buffers.Δx 
+        Δx .= dual_evaluator.buffers.Δx
 
         return nothing
     else
         # the "dual dual" problem has 0 variables and 0 contraints, but running it allows us to retrieve the proposed Δx [length m].
-        dual_dual_evaluator = DualEvaluator(; iterate = optimizer.iterate, buffers = optimizer.buffers)
-        dual_dual_evaluator(MArray(SA[zero(T)]), SVector{0,T}(), SVector{0,T}())
+        dual_dual_evaluator = DualEvaluator(; iterate = optimizer.iterate,
+                                            buffers = optimizer.buffers)
+        dual_dual_evaluator(MArray(SA[zero(T)]), SVector{0, T}(), SVector{0, T}())
 
         Δx .= dual_dual_evaluator.buffers.Δx
 
@@ -78,7 +79,7 @@ function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters
 
     # Setup optimizers
     dual_optimizer = CCSAOptimizer(; f_and_jac = dual_evaluator, iterate = dual_iterate,
-                                    buffers = dual_buffers,
+                                   buffers = dual_buffers,
                                    dual_optimizer = nothing,
                                    max_iters = max_dual_iters,
                                    max_inner_iters = max_dual_inner_iters)
@@ -106,8 +107,9 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     @unpack f_and_jac, iterate, max_inner_iters = optimizer
 
     is_primal = optimizer.dual_optimizer !== nothing
-    str = is_primal ? "primal" : "dual" 
-    is_primal && @info "Starting $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.jac_fx) 
+    str = is_primal ? "primal" : "dual"
+    is_primal &&
+        @info "Starting $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.jac_fx)
 
     # Check feasibility
     # any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
@@ -119,37 +121,40 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         # is_primal && error("e")
 
         # Compute conservative approximation g at proposed point.
-        iterate.gx_proposed .= iterate.fx .+ sum(abs2, iterate.Δx_proposed ./ iterate.σ) / 2 .* iterate.ρ
+        iterate.gx_proposed .= iterate.fx .+
+                               sum(abs2, iterate.Δx_proposed ./ iterate.σ) / 2 .* iterate.ρ
         mul!(iterate.gx_proposed, iterate.jac_fx, iterate.Δx_proposed, true, true)
         # Compute f at proposed point. 
-        iterate.x_proposed .= iterate.x + iterate.Δx_proposed 
+        iterate.x_proposed .= iterate.x + iterate.Δx_proposed
         f_and_jac(iterate.fx_proposed, nothing, iterate.x_proposed)
         # Check if conservative
         conservative = Iterators.map(>=, iterate.gx_proposed, iterate.fx_proposed)
 
-        is_primal && @info "Completed 1 $str inner iteration" repr(iterate.Δx_proposed) repr(iterate.x) repr(iterate.x_proposed) repr(iterate.fx_proposed) repr(iterate.gx_proposed) repr(iterate.fx) repr(iterate.ρ) repr(collect(conservative))
+        is_primal &&
+            @info "Completed 1 $str inner iteration" repr(iterate.Δx_proposed) repr(iterate.x) repr(iterate.x_proposed) repr(iterate.fx_proposed) repr(iterate.gx_proposed) repr(iterate.fx) repr(iterate.ρ) repr(collect(conservative))
 
         # Increase ρ for non-conservative convex approximations.
-        iterate.ρ[.!conservative] .*= 2 
+        iterate.ρ[.!conservative] .*= 2
 
         if all(conservative) || (i == max_inner_iters)
             !all(conservative) && @info "Could not find conservative approx for $str"
             break
         end
-
     end
 
     # Update iterate
     iterate.Δx_last .= iterate.Δx
-    iterate.Δx .= iterate.Δx_proposed 
+    iterate.Δx .= iterate.Δx_proposed
     iterate.x .= iterate.x_proposed
     f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
     # Update σ based on monotonicity of changes
-    map!((σ, Δx, Δx_last) -> sign(Δx) == sign(Δx_last) ? 2σ : σ / 2, iterate.σ, iterate.σ, iterate.Δx, iterate.Δx_last)
+    map!((σ, Δx, Δx_last) -> sign(Δx) == sign(Δx_last) ? 2σ : σ / 2, iterate.σ, iterate.σ,
+         iterate.Δx, iterate.Δx_last)
     # Halve ρ (be less conservative)
     iterate.ρ ./= 2
 
-    is_primal && @info "Completed 1 $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.jac_fx) repr(iterate.Δx_last) repr(iterate.Δx)
+    is_primal &&
+        @info "Completed 1 $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.jac_fx) repr(iterate.Δx_last) repr(iterate.Δx)
     #=
         if norm(opt.Δx, Inf) < opt.xtol_abs
             opt.RET = :XTOL_ABS
