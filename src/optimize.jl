@@ -102,7 +102,6 @@ What are the invariants / contracts?
 """
 function step!(optimizer::CCSAOptimizer{T}) where {T}
     @unpack f_and_jac, iterate, max_inner_iters = optimizer
-    iterate.Δx_last .= iterate.Δx
 
     is_primal = optimizer.dual_optimizer !== nothing
 
@@ -118,11 +117,13 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         =#
         proposed_Δx = propose_Δx(optimizer)
 
-        # Check if conservative, by computing and comparing g and f for objective + constraints at proposed new x.
+        # Compute conservative approximation g at proposed point.
         iterate.gx .= iterate.fx .+ sum(abs2, proposed_Δx ./ iterate.σ) / 2 .* iterate.ρ
         mul!(iterate.gx, iterate.jac_fx, proposed_Δx, true, true)
-        # TODO: don't need jac here, only f
-        f_and_jac(iterate.fx2, iterate.jac_fx2, iterate.x + proposed_Δx)
+        # Compute f at proposed point. TODO: don't need jac here, only f
+        iterate.x2 .= iterate.x + proposed_Δx
+        f_and_jac(iterate.fx2, iterate.jac_fx2, iterate.x2)
+        # Check if conservative
         conservative = Iterators.map(>=, iterate.gx, iterate.fx2)
 
         if is_primal
