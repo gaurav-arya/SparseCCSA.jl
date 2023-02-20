@@ -13,7 +13,7 @@ iterate, which is sufficient to specify the dual problem.
     # Below are buffers used by inner iteration logic. TODO: move into separate struct, defined in optimize.jl?
     Δx::Vector{T} # n x 1 xᵏ⁺¹ - xᵏ
     Δx_last::Vector{T} # n x 1 xᵏ - xᵏ⁻¹
-    gx::Vector{T} # (m+1) x 1 values of approximate objective and constraints
+    gx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints
     x_proposed::Vector{T}
     Δx_proposed::Vector{T}
     fx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints
@@ -22,7 +22,7 @@ end
 function init_iterate(; n, m, x0::Vector{T}, jac_prototype, lb, ub) where {T}
     return Iterate(; x = x0, fx = zeros(T, m + 1), jac_fx = copy(jac_prototype), ρ = ones(T, m + 1),
                    σ = ones(T, n), lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n), 
-                   gx = zeros(T, m + 1), x_proposed = zeros(T, n), Δx_proposed = zeros(T, n), fx_proposed = zeros(T, m + 1))
+                   gx_proposed = zeros(T, m + 1), x_proposed = zeros(T, n), Δx_proposed = zeros(T, n), fx_proposed = zeros(T, m + 1))
 end
 
 """

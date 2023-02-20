@@ -8,7 +8,7 @@ using CatViews
 
 import Base.@kwdef
 
-export init, solve!, step!
+export init, solve!, step!, reinit!
 
 include("dual.jl")
 include("optimize.jl")
