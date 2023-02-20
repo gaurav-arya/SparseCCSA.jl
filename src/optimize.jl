@@ -48,7 +48,6 @@ Return a CCSAOptimizer that can be step!'d.
 Free to allocate here.
 """
 # TODO: defaults for kwargs below
-# TODO: implement init recursively
 function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters,
               max_dual_iters, max_dual_inner_iters, jac_prototype) where {T}
     # x0 = (x0 === nothing) ? zeros(n) : copy(x0)
@@ -80,8 +79,8 @@ end
 Perform one CCSA iteration.
 
 What are the invariants / contracts?
-- optimizer.iterate.{fx,jac} come from applying optimizer.f_and_jac at optimizer.iterate.x
-- optimizer.dual_optimizer.f_and_jac contains a ref to optimizer.iterate, so updating latter updates the former. 
+- optimizer.iterate.{fx,jac_fx} come from applying optimizer.f_and_jac at optimizer.iterate.x
+- optimizer.dual_optimizer contains a ref to optimizer.iterate, so updating latter implicitly updates the former. 
 """
 function step!(optimizer::CCSAOptimizer{T}) where {T}
     @unpack f_and_jac, iterate, dual_optimizer, max_inner_iters = optimizer
