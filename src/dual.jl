@@ -15,12 +15,13 @@ iterate, which is sufficient to specify the dual problem.
     Δx_last::Vector{T} # n x 1 xᵏ - xᵏ⁻¹
     gx::Vector{T} # (m+1) x 1 values of approximate objective and constraints
     fx2::Vector{T} # (m+1) x 1 values of approximate objective and constraints
+    jac_fx2::L # (m+1) x 1 values of approximate objective and constraints
 end
 
 function init_iterate(; n, m, x0::Vector{T}, jac_prototype, lb, ub) where {T}
-    return Iterate(; x = x0, fx = zeros(T, m + 1), jac_fx = jac_prototype, ρ = ones(T, m + 1),
+    return Iterate(; x = x0, fx = zeros(T, m + 1), jac_fx = copy(jac_prototype), ρ = ones(T, m + 1),
                    σ = ones(T, n), lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n), 
-                   gx = zeros(T, m + 1), fx2 = zeros(T, m + 1))
+                   gx = zeros(T, m + 1), fx2 = zeros(T, m + 1), jac_fx2 = copy(jac_prototype))
 end
 
 """

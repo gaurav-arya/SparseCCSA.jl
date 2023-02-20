@@ -54,7 +54,7 @@ function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters
     # x0 = (x0 === nothing) ? zeros(n) : copy(x0)
 
     # Setup primal iterate, with n variables and m constraints
-    iterate = init_iterate(; n, m, x0, jac_prototype = copy(jac_prototype), lb, ub)
+    iterate = init_iterate(; n, m, x0, jac_prototype, lb, ub)
     buffers = init_buffers(; n, m, T)
 
     # Setup dual iterate, with m variables and 0 constraints
@@ -70,6 +70,10 @@ function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters
                                    max_inner_iters = max_dual_inner_iters)
     optimizer = CCSAOptimizer(; f_and_jac, iterate, buffers, dual_optimizer, max_iters,
                               max_inner_iters)
+
+    # Initialize objective and gradient
+    # TODO: could be acceptable to move this to beginning of step!
+    f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
 
     return optimizer
 end
@@ -87,6 +91,8 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     @unpack f_and_jac, iterate, dual_optimizer, max_inner_iters = optimizer
     iterate.Δx_last .= iterate.Δx
 
+    is_primal = optimizer.dual_optimizer !== nothing
+
     # Check feasibility
     any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
 
@@ -99,14 +105,22 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         proposed_Δx = propose_Δx(optimizer)
 
         # Check if conservative, by computing and comparing g and f for objective + constraints at proposed new x.
-        @show proposed_Δx
         iterate.gx .= iterate.fx .+ sum(abs2, proposed_Δx ./ iterate.σ) / 2 .* iterate.ρ
         mul!(iterate.gx, iterate.jac_fx, proposed_Δx, true, true)
-        f_and_jac(iterate.fx2, iterate.jac_fx, iterate.x + proposed_Δx)
+        # TODO: don't need jac here, only f
+        f_and_jac(iterate.fx2, iterate.jac_fx2, iterate.x + proposed_Δx)
         conservative = Iterators.map(>=, iterate.gx, iterate.fx2)
 
+        if is_primal
+            @info "Completed 1 primal inner iteration" repr(proposed_Δx) repr(iterate.fx2) repr(iterate.gx) repr(iterate.fx) repr(collect(conservative))
+        end
+
+        all(conservative) && break
         iterate.ρ[.!conservative] *= 2 # increase ρ for non-conservative convex approximations.
 
+        if is_primal && i == max_inner_iters
+            @info "Could not find conservative approx for primal"
+        end
         # Reinitialize dual_iterate (what's changed? iterate's ρ has changed, and thus dual_evaluator.)
         # TODO: should this reinitalization occur elsewhere? (E.g. as part of solve!, as is already done for x, fx ?)
         # Also, should this reiniitalization occur at all? (could it be useful to "remember" σ/ρ/x used previously?)
@@ -143,9 +157,6 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
 end
 
 function solve!(optimizer::CCSAOptimizer)
-    # Initialize objective and gradient
-    iterate = optimizer.iterate
-    optimizer.f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
 
     # TODO: catch stopping conditions in opt and exit here
     for i in 1:(optimizer.max_iters)
