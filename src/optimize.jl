@@ -25,7 +25,7 @@ function propose_Δx(optimizer::CCSAOptimizer{T}) where {T}
         dual_optimizer = optimizer.dual_optimizer
         solve!(dual_optimizer)
         # Run dual evaluator at dual opt and extract Δx from evaluator's buffer
-        dual_evaluator = dual_optimizer.f_and_jac # DualEvaluator(; iterate = optimizer.iterate, buffers=optimizer.buffers) 
+        dual_evaluator = dual_optimizer.f_and_jac # equivalent to DualEvaluator(; iterate = optimizer.iterate, buffers=optimizer.buffers) 
         dual_iterate = dual_optimizer.iterate 
         dual_evaluator(dual_iterate.fx, dual_iterate.jac, dual_iterate.x)
         return dual_evaluator.buffers.Δx
@@ -54,18 +54,21 @@ function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters
     # x0 = (x0 === nothing) ? zeros(n) : copy(x0)
 
     # Setup primal iterate, with n variables and m constraints
-    iterate = init_iterate(; n, m, x0, jac_prototype = copy(jac_prototype), lb, ub)
+    iterate = init_iterate(; n, m, x0, jac_fx_prototype = copy(jac_prototype), lb, ub)
+    buffers = init_buffers(; n, m, T)
 
     # Setup dual iterate, with m variables and 0 constraints
-    dual_evaluator = DualEvaluator(; iterate, buffers = init_buffers(; T, n, m))
     dual_iterate = init_iterate_for_dual(; m, T)
+    dual_evaluator = DualEvaluator(; iterate, buffers)
+    dual_buffers = init_buffers_for_dual(; m, T)
 
     # Setup optimizers
     dual_optimizer = CCSAOptimizer(; f_and_jac = dual_evaluator, iterate = dual_iterate,
+                                    buffers = dual_buffers,
                                    dual_optimizer = nothing,
                                    max_iters = max_dual_iters,
                                    max_inner_iters = max_dual_inner_iters)
-    optimizer = CCSAOptimizer(; f_and_jac, iterate, dual_optimizer, max_iters,
+    optimizer = CCSAOptimizer(; f_and_jac, iterate, buffers, dual_optimizer, max_iters,
                               max_inner_iters)
 
     return optimizer

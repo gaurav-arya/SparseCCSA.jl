@@ -43,9 +43,8 @@ Mutable buffers used by the dual optimization algorithm.
     grad_gλ_all::Vector{T} # (m + 1) x 1 buffer
 end
 
-function init_buffers(; T, n, m)
-    DualBuffers(zeros(T, n), zeros(T, n), zeros(T, n), zeros(T, m + 1), zeros(T, m + 1))
-end
+init_buffers(; n, m, T) = DualBuffers(zeros(T, n), zeros(T, n), zeros(T, n), zeros(T, m + 1), zeros(T, m + 1))
+init_buffers_for_dual(; m, T) = init_buffers(; n = m, m = 0, T)
 
 """
 A callable structure for evaluating the dual function and its gradient.
