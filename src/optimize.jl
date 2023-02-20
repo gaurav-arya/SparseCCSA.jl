@@ -24,17 +24,19 @@ function propose_Δx(optimizer::CCSAOptimizer{T}) where {T}
     if optimizer.dual_optimizer !== nothing
         dual_optimizer = optimizer.dual_optimizer
         solve!(dual_optimizer)
+        # We can form the dual evaluator with DualEvaluator(; iterate = optimizer.iterate, buffers=optimizer.buffers),
+        # but since we have already formed it for the dual optimizer we just retrieve it here.  
+        dual_evaluator = dual_optimizer.f_and_jac
         # Run dual evaluator at dual opt and extract Δx from evaluator's buffer
-        dual_evaluator = dual_optimizer.f_and_jac # equivalent to DualEvaluator(; iterate = optimizer.iterate, buffers=optimizer.buffers) 
         dual_iterate = dual_optimizer.iterate 
         dual_evaluator(dual_iterate.fx, dual_iterate.jac_fx, dual_iterate.x)
         return dual_evaluator.buffers.Δx
     else
-        # iterate describes a problem with m variables and 0 constraints.
-        # buffers are also length m. 
+        # the "dual dual" problem has 0 variables and 0 contraints, but running it allows us to retrieve the proposed Δx [length m].
         dual_dual_evaluator = DualEvaluator(; iterate = optimizer.iterate, buffers = optimizer.buffers)
-        # problem: we want to fetch an iterate to feed (gλ is length 1, ∇gλ is length 0)
-        dual_dual_evaluator(MArray(SA[one(T)]), SVector{0,T}(), SVector{0,T}())
+        dual_dual_evaluator(MArray(SA[zero(T)]), SVector{0,T}(), SVector{0,T}())
+        @show dual_dual_evaluator.buffers.Δx
+        @show optimizer.iterate
         return dual_dual_evaluator.buffers.Δx
     end
 end
@@ -74,6 +76,7 @@ function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters
     # Initialize objective and gradient
     # TODO: could be acceptable to move this to beginning of step!
     f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
+    dual_evaluator(dual_iterate.fx, dual_iterate.jac_fx, dual_iterate.x)
 
     return optimizer
 end
@@ -88,7 +91,7 @@ What are the invariants / contracts?
 - optimizer.dual_optimizer contains a ref to optimizer.iterate, so updating latter implicitly updates the former. 
 """
 function step!(optimizer::CCSAOptimizer{T}) where {T}
-    @unpack f_and_jac, iterate, dual_optimizer, max_inner_iters = optimizer
+    @unpack f_and_jac, iterate, max_inner_iters = optimizer
     iterate.Δx_last .= iterate.Δx
 
     is_primal = optimizer.dual_optimizer !== nothing
@@ -113,13 +116,15 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         conservative = Iterators.map(>=, iterate.gx, iterate.fx2)
 
         if is_primal
-            @info "Completed 1 primal inner iteration" repr(proposed_Δx) repr(iterate.fx2) repr(iterate.gx) repr(iterate.fx) repr(collect(conservative))
+            @info "Completed 1 primal inner iteration" repr(proposed_Δx) repr(iterate.fx2) repr(iterate.gx) repr(iterate.fx) repr(iterate.ρ) repr(collect(conservative)) repr(optimizer.dual_optimizer.iterate.x)
+        else
+            @info "Completed 1 dual inner iteration" repr(proposed_Δx) repr(iterate.x) repr(iterate.fx2) repr(iterate.gx) repr(iterate.ρ)
         end
 
         iterate.ρ[.!conservative] *= 2 # increase ρ for non-conservative convex approximations.
 
         if all(conservative) || (i == max_inner_iters)
-            (i == max_inner_iters) && @info "Could not find conservative approx for primal"
+            !all(conservative) && @info "Could not find conservative approx"
             break
         end
 
@@ -141,6 +146,10 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
          iterate.Δx, iterate.Δx_last)
     # Halve ρ (be less conservative)
     iterate.ρ ./= 2
+
+    if is_primal
+        @info "Completed 1 primal outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.fx)
+    end
     #=
         if norm(opt.Δx, Inf) < opt.xtol_abs
             opt.RET = :XTOL_ABS

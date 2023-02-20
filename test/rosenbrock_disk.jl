@@ -22,28 +22,26 @@ fx = zeros(m + 1)
 jac = zeros(m+1, n)
 f_and_jac(fx, jac, zeros(n))
 fx
-
-## Test dual evaluator
-
-# TODO: init_iterate is really mostly for initializing the type, abusing here to get the right values.
-f_and_jac(fx, jac, zeros(n))
-iterate = SparseCCSA.init_iterate(; n, m, x0 = zeros(2), jac_fx_prototype = jac, lb=[-Inf, -Inf], ub=[Inf, Inf])    
-iterate.fx .= fx
-buffers = SparseCCSA.init_buffers(; T=Float64, n)
-dual_evaluator = SparseCCSA.DualEvaluator(; iterate, buffers)
-
-gλ = zeros(1)
-∇gλ = zeros(m)
-λ = ones(1)
-dual_evaluator(gλ, ∇gλ, λ)
-gλ
-∇gλ
-dual_evaluator.buffers.Δx
+jac
 
 ## Solve optimization problem
 
-opt = init(f_and_jac, fill(typemin(0.0), 2), fill(typemax(0.0), 2), n, m; x0 = [0.0, 0.0], max_iters = 5,
-           max_inner_iters = 5,
-          max_dual_iters = 2, max_dual_inner_iters = 5, jac_prototype = zeros(m + 1, n));
+opt = init(f_and_jac, fill(typemin(0.0), 2), fill(typemax(0.0), 2), n, m; x0 = [0.5, 0.5], max_iters = 5,
+           max_inner_iters = 10,
+           max_dual_iters = 20, max_dual_inner_iters = 3, jac_prototype = zeros(m + 1, n));
 
-step!(opt)
+dual_optimizer = opt.dual_optimizer
+dual_evaluator = dual_optimizer.f_and_jac
+
+function evaluate_dual(λ1)
+    dual_evaluator(dual_optimizer.iterate.fx, dual_optimizer.iterate.jac_fx, [λ1])
+    return (dual_optimizer.iterate.fx, dual_evaluator.buffers.Δx)
+end
+evaluate_dual(29) # minimum!
+
+using GLMakie
+lines(1:50, [evaluate_dual(i)[1][1] for i in 1:50])
+
+## Expected minimum = 29. Can we get there? Yes!
+
+step!(dual_optimizer)
