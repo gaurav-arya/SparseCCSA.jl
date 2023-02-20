@@ -1,3 +1,7 @@
+using Test
+using SparseCCSA
+using ForwardDiff
+
 @testset "Dual evaluator" begin
     #=
     The below corresponds to a a convexified problem with
@@ -27,8 +31,8 @@
 
     # Form dual evaluator 
     # TODO: init_iterate is really mostly for initializing the type, abusing here to get the right values.
-    iterate = SparseCCSA.init_iterate(; n = 2, m = 2, x0 = ones(2), jac_fx_prototype = [2 1; 1 0; 0 1], lb=[-Inf, -Inf], ub=[Inf, Inf])    
-    buffers = SparseCCSA.init_buffers(; T=Float64, n=2)
+    iterate = SparseCCSA.init_iterate(; n = 2, m = 2, x0 = ones(2), jac_prototype = [2 1; 1 0; 0 1], lb=[-Inf, -Inf], ub=[Inf, Inf])    
+    buffers = SparseCCSA.init_buffers(; T=Float64, n=2, m=2)
     dual_evaluator = SparseCCSA.DualEvaluator(; iterate, buffers)
 
     # Compare dual evaluator output to analytic

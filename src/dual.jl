@@ -64,7 +64,7 @@ in-place to their new values at λ [length = m].
 The evaluator's internal buffer Δx is also set so that xᵏ + Δx is the optimal primal.
 """
 function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ) where {T}
-    @unpack σ, ρ, x, fx, jac_fx, lb, ub = evaluator.iterate
+    @unpack σ, ρ, x, fx, jac_fx, lb, ub = evaluator.iterate # these should be read-only
     @unpack a, b, Δx, λ_all, grad_gλ_all = evaluator.buffers
     # The dual evaluation turns out to be simpler to express with λ_{1...m} left-augmented by λ_0 = 1.
     # We have special (m+1)-length buffers for this, which is a little wasteful. 

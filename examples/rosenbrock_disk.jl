@@ -1,4 +1,5 @@
 # https://www.mathworks.com/help/optim/ug/example-nonlinear-constrained-minimization.html?w.mathworks.com
+# This file is work-in-progress
 
 using ForwardDiff
 using SparseCCSA
@@ -30,7 +31,7 @@ jac
 
 begin
 opt = init(f_and_jac, fill(typemin(0.0), 2), fill(typemax(0.0), 2), n, m; x0 = [0.5, 0.5], max_iters = 5,
-           max_inner_iters = 5,
+           max_inner_iters = 20,
            max_dual_iters = 50, max_dual_inner_iters = 50, jac_prototype = zeros(m + 1, n));
 dual_optimizer = opt.dual_optimizer
 dual_iterate = dual_optimizer.iterate
