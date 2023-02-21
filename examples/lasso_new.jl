@@ -52,6 +52,7 @@ ub = fill(Inf, 2p)
 
 opt = init(f_and_jac, lb, ub, 2p, 2p; x0 = u_and_t, max_iters = 2, max_inner_iters = 10,
            max_dual_iters = 5, max_dual_inner_iters = 5, jac_prototype = jac);
+step!(opt)
 sol = solve!(opt)
 
 usol = sol.x[1:p]
