@@ -52,10 +52,10 @@ using ForwardDiff
         end
 
         gλ = zeros(1)
-        ∇gλ = zeros(2)
+        ∇gλ = zeros(2)'
         dual_evaluator(gλ, ∇gλ, λ)
         @test gλ[1] ≈ h(λ) # dual objective
-        @test ∇gλ ≈ ForwardDiff.gradient(h, λ) # dual gradient 
+        @test ∇gλ ≈ ForwardDiff.gradient(h, λ)' # dual gradient 
         @test dual_evaluator.buffers.Δx ≈ Δx_solution(λ) # primal solution for dual = λ
     end
 end

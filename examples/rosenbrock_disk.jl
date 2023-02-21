@@ -30,7 +30,7 @@ jac
 ## Solve optimization problem
 
 begin
-    opt = init(f_and_jac, fill(typemin(0.0), 2), fill(typemax(0.0), 2), n, m;
+    opt = init(f_and_jac, fill(-1.0, 2), fill(1.0, 2), n, m;
                x0 = [0.5, 0.5], max_iters = 5,
                max_inner_iters = 20,
                max_dual_iters = 50, max_dual_inner_iters = 50,
@@ -39,9 +39,19 @@ begin
     dual_iterate = dual_optimizer.iterate
 end
 
+## Dual optimization (can we stop σ and ρ blowing up?)
+step!(dual_optimizer)
+dual_optimizer.iterate |> dump 
+
 ## Back to regular optimization
 
+bad_x = [0.627345, 0.390871]
+opt.iterate.x .= [0.2, 0.2] #
+opt.iterate.ρ .= 1.0
+opt.iterate.σ .= 1.0
+for i in 1:100
 step!(opt)
+end
 
 ## Checking dual opt
 
@@ -75,4 +85,9 @@ using GLMakie
 lines(1:50, [evaluate_dual(i)[1][1] for i in 1:50])
 
 ## Expected minimum = 29. Can we get there? Yes!
+
+## Try NLOpt
+
 using NLopt
+
+

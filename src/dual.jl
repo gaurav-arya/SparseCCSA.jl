@@ -63,7 +63,7 @@ end
 """
     (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ)
 
-Set the negated dual gradient neg_grad_gλ [length = m] and negated dual objective neg_gλ [length = 1]
+Set the negated dual gradient neg_grad_gλ [shape 1 x m] and negated dual objective neg_gλ [length = 1]
 in-place to their new values at λ [length = m].
 The evaluator's internal buffer Δx is also set so that xᵏ + Δx is the optimal primal.
 """
@@ -86,6 +86,7 @@ function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ) where {T}
         grad_gλ_all .= 0
         mul!(grad_gλ_all, jac_fx, Δx)
         grad_gλ_all .+= fx .+ sum(abs2, Δx ./ σ) ./ 2 .* ρ
+        @show grad_gλ_all neg_grad_gλ
         neg_grad_gλ .= -1 * (@view grad_gλ_all[2:end])'
     end
 
