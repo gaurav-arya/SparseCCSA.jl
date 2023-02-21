@@ -37,7 +37,7 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}) where {T}
         # Run dual evaluator at dual opt and extract Δx from evaluator's buffer
         dual_iterate = dual_optimizer.iterate
         dual_evaluator(dual_iterate.fx, dual_iterate.jac_fx, dual_iterate.x)
-        @show dual_iterate.x sol.x
+        # @show dual_iterate.x sol.x
 
         Δx .= dual_evaluator.buffers.Δx
 
@@ -121,22 +121,30 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         # is_primal && error("e")
 
         # Compute conservative approximation g at proposed point.
-        iterate.gx_proposed .= iterate.fx .+
-                               sum(abs2, iterate.Δx_proposed ./ iterate.σ) / 2 .* iterate.ρ
+        # w is from svanberg paper
+        w = sum(abs2, iterate.Δx_proposed ./ iterate.σ) / 2
+        iterate.gx_proposed .= iterate.fx .+ iterate.ρ .* w
         mul!(iterate.gx_proposed, iterate.jac_fx, iterate.Δx_proposed, true, true)
         # Compute f at proposed point. 
-        iterate.x_proposed .= iterate.x + iterate.Δx_proposed
+        iterate.x_proposed .= iterate.x .+ iterate.Δx_proposed
         f_and_jac(iterate.fx_proposed, nothing, iterate.x_proposed)
         # Check if conservative
         conservative = Iterators.map(>=, iterate.gx_proposed, iterate.fx_proposed)
 
-        is_primal &&
-            @info "Completed 1 $str inner iteration" repr(iterate.Δx_proposed) repr(iterate.x) repr(iterate.x_proposed) repr(iterate.fx_proposed) repr(iterate.gx_proposed) repr(iterate.fx) repr(iterate.ρ) repr(collect(conservative))
+        # is_primal &&
+        #     @info "Completed 1 $str inner iteration" repr(iterate.Δx_proposed) repr(iterate.x) repr(iterate.x_proposed) repr(iterate.fx_proposed) repr(iterate.gx_proposed) repr(iterate.fx) repr(iterate.ρ) repr(collect(conservative))
 
         # Increase ρ for non-conservative convex approximations.
-        iterate.ρ[.!conservative] .*= 2
+        map!(iterate.ρ, iterate.ρ, iterate.gx_proposed, iterate.fx_proposed) do ρ, gx_proposed, fx_proposed
+            return if gx_proposed < fx_proposed
+               min(10ρ, 1.1 * (ρ + (fx_proposed - gx_proposed) / w)) 
+            else
+                ρ
+            end
+        end
+        # @. iterate.ρ[!conservative] *= min(10 * iterate.ρ[!conservative], 1.1 * )
 
-        if all(conservative) || (i == max_inner_iters)
+        if (all(conservative) || (i == max_inner_iters)) && is_primal
             !all(conservative) && @info "Could not find conservative approx for $str"
             break
         end
@@ -144,14 +152,17 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
 
     # Update iterate
     iterate.Δx_last .= iterate.Δx
+
     iterate.Δx .= iterate.Δx_proposed
     iterate.x .= iterate.x_proposed
     f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
     # Update σ based on monotonicity of changes
-    map!((σ, Δx, Δx_last) -> sign(Δx) == sign(Δx_last) ? 2σ : σ / 2, iterate.σ, iterate.σ,
-         iterate.Δx, iterate.Δx_last)
-    # Halve ρ (be less conservative)
-    iterate.ρ ./= 2
+    map!(iterate.σ, iterate.σ, iterate.Δx, iterate.Δx_last, iterate.lb, iterate.ub) do σ, Δx, Δx_last, lb, ub
+        scaled = sign(Δx) == sign(Δx_last) ? 1.2σ : 0.7σ
+        return (isinf(ub) || isinf(lb)) ? scaled : clamp(scaled, 1e-8*(ub - lb), 10*(ub - lb))
+    end
+    # Reduce ρ (be less conservative)
+    @. iterate.ρ = max(iterate.ρ, 1e-5)
 
     is_primal &&
         @info "Completed 1 $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.jac_fx) repr(iterate.Δx_last) repr(iterate.Δx)
