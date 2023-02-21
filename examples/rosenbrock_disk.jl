@@ -41,7 +41,7 @@ end
 
 ## Dual optimization (can we stop σ and ρ blowing up?)
 step!(dual_optimizer)
-dual_optimizer.iterate |> dump 
+dual_optimizer.iterate |> dump
 
 ## Back to regular optimization
 
@@ -50,7 +50,7 @@ opt.iterate.x .= [0.2, 0.2] #
 opt.iterate.ρ .= 1.0
 opt.iterate.σ .= 1.0
 for i in 1:10
-step!(opt)
+    step!(opt)
 end
 
 ## Checking dual opt
@@ -89,5 +89,3 @@ lines(1:50, [evaluate_dual(i)[1][1] for i in 1:50])
 ## Try NLOpt
 
 using NLopt
-
-
