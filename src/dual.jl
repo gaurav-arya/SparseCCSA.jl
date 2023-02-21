@@ -80,13 +80,13 @@ function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ) where {T}
     @. Δx = clamp(-b / (2 * a), -σ, σ)
     @. Δx = clamp(Δx, lb - x, ub - x)
 
-    if neg_grad_gλ !== nothing
+    if (neg_grad_gλ !== nothing) && (length(neg_grad_gλ) > 0)
         # Below we populate grad_gλ_all, i.e. the gradient WRT λ_0, ..., λ_m,
         # although we ultimately don't care about the first entry.
         grad_gλ_all .= 0
         mul!(grad_gλ_all, jac_fx, Δx)
-        grad_gλ_all .+= fx + sum(abs2, Δx ./ σ) ./ 2 .* ρ
-        neg_grad_gλ .= -1 * @view grad_gλ_all[2:end]
+        grad_gλ_all .+= fx .+ sum(abs2, Δx ./ σ) ./ 2 .* ρ
+        neg_grad_gλ .= -1 * (@view grad_gλ_all[2:end])'
     end
 
     neg_gλ[1] = -1 * (dot(λ_all, fx) + sum(@. a * Δx^2 + b * Δx))
