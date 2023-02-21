@@ -89,7 +89,7 @@ function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters
     # Initialize objective and gradient
     # TODO: could be acceptable to move this to beginning of step!
     f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
-    @show dual_iterate.fx dual_iterate.jac_fx dual_iterate.x
+    # @show dual_iterate.fx dual_iterate.jac_fx dual_iterate.x
     dual_evaluator(dual_iterate.fx, dual_iterate.jac_fx, dual_iterate.x)
 
     return optimizer
@@ -109,8 +109,8 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
 
     is_primal = optimizer.dual_optimizer !== nothing
     str = is_primal ? "primal" : "dual"
-    is_primal &&
-        @info "Starting $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.jac_fx)
+    # is_primal &&
+    #     @info "Starting $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.jac_fx)
 
     # Check feasibility
     # any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
@@ -128,21 +128,22 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         iterate.x_proposed .= iterate.x .+ iterate.Δx_proposed
         f_and_jac(iterate.fx_proposed, nothing, iterate.x_proposed)
 
-        # Check approximation error 
+        # Compute approximation error 
         approx_error = Iterators.map(-, iterate.gx_proposed, iterate.fx_proposed)
 
         # Increase ρ for non-conservative convex approximations.
-        map!(iterate.ρ, iterate.ρ, approx_error) do ρ, approx_error
-            return if approx_error < 0
-                min(10ρ, 1.1 * (ρ - approx_error / w))
-            else
-                ρ
+        conservative = false
+        for i in eachindex(iterate.ρ)
+            approx_error = iterate.gx_proposed[i] - iterate.fx_proposed[i]
+            conservative &= (approx_error > 0)
+            if approx_error < 0
+                iterate.ρ[i] = min(10.0 * iterate.ρ[i], 1.1 * (iterate.ρ[i] - approx_error / w))
             end
         end
 
         # Check if conservative
-        if (all(>=(0), approx_error) || (i == max_inner_iters)) && is_primal
-            !all(conservative) && @info "Could not find conservative approx for $str"
+        if conservative || (i == max_inner_iters) 
+            # (!conservative && is_primal) && @info "Could not find conservative approx for $str"
             break
         end
     end
@@ -154,18 +155,21 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
 
     # Update σ based on monotonicity of changes
-    map!(iterate.σ, iterate.σ, iterate.Δx, iterate.Δx_last, iterate.lb,
-         iterate.ub) do σ, Δx, Δx_last, lb, ub
-        scaled = sign(Δx) == sign(Δx_last) ? 1.2σ : 0.7σ
-        return (isinf(ub) || isinf(lb)) ? scaled :
-               clamp(scaled, 1e-8 * (ub - lb), 10 * (ub - lb))
+    for i in eachindex(iterate.σ)
+        scaled = (sign(iterate.Δx[i]) == sign(iterate.Δx_last[i]) ? 1.2 : 0.7) * iterate.σ[i]
+        iterate.σ[i] = if isinf(iterate.ub[i]) || isinf(iterate.lb[i])
+            scaled
+        else
+            range = iterate.ub[i] - iterate.lb[i]
+            clamp(scaled, 1e-8 * range, 10 * range)
+        end
     end
 
     # Reduce ρ (be less conservative)
     @. iterate.ρ = max(iterate.ρ, 1e-5)
 
-    is_primal &&
-        @info "Completed 1 $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.jac_fx) repr(iterate.Δx_last) repr(iterate.Δx)
+    # is_primal &&
+    #     @info "Completed 1 $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.jac_fx) repr(iterate.Δx_last) repr(iterate.Δx)
     #=
         if norm(opt.Δx, Inf) < opt.xtol_abs
             opt.RET = :XTOL_ABS

@@ -49,7 +49,11 @@ bad_x = [0.627345, 0.390871]
 opt.iterate.x .= [0.2, 0.2] #
 opt.iterate.ρ .= 1.0
 opt.iterate.σ .= 1.0
-for i in 1:10
+for i in 1:100
+step!(opt)
+end
+
+for i in 1:100
     step!(opt)
 end
 
