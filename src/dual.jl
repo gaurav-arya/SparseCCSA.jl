@@ -86,7 +86,6 @@ function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ) where {T}
         grad_gλ_all .= 0
         mul!(grad_gλ_all, jac_fx, Δx)
         grad_gλ_all .+= fx .+ sum(abs2, Δx ./ σ) ./ 2 .* ρ
-        @show grad_gλ_all neg_grad_gλ
         neg_grad_gλ .= -1 * (@view grad_gλ_all[2:end])'
     end
 
