@@ -136,9 +136,10 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         #     @info "Completed 1 $str inner iteration" repr(iterate.Δx_proposed) repr(iterate.x) repr(iterate.x_proposed) repr(iterate.fx_proposed) repr(iterate.gx_proposed) repr(iterate.fx) repr(iterate.ρ) repr(collect(conservative))
 
         # Increase ρ for non-conservative convex approximations.
-        map!(iterate.ρ, iterate.ρ, iterate.gx_proposed, iterate.fx_proposed) do ρ, gx_proposed, fx_proposed
+        map!(iterate.ρ, iterate.ρ, iterate.gx_proposed,
+             iterate.fx_proposed) do ρ, gx_proposed, fx_proposed
             return if gx_proposed < fx_proposed
-               min(10ρ, 1.1 * (ρ + (fx_proposed - gx_proposed) / w)) 
+                min(10ρ, 1.1 * (ρ + (fx_proposed - gx_proposed) / w))
             else
                 ρ
             end
@@ -158,9 +159,11 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     iterate.x .= iterate.x_proposed
     f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
     # Update σ based on monotonicity of changes
-    map!(iterate.σ, iterate.σ, iterate.Δx, iterate.Δx_last, iterate.lb, iterate.ub) do σ, Δx, Δx_last, lb, ub
+    map!(iterate.σ, iterate.σ, iterate.Δx, iterate.Δx_last, iterate.lb,
+         iterate.ub) do σ, Δx, Δx_last, lb, ub
         scaled = sign(Δx) == sign(Δx_last) ? 1.2σ : 0.7σ
-        return (isinf(ub) || isinf(lb)) ? scaled : clamp(scaled, 1e-8*(ub - lb), 10*(ub - lb))
+        return (isinf(ub) || isinf(lb)) ? scaled :
+               clamp(scaled, 1e-8 * (ub - lb), 10 * (ub - lb))
     end
     # Reduce ρ (be less conservative)
     @. iterate.ρ = max(iterate.ρ, 1e-5)
