@@ -89,6 +89,7 @@ function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters
     # Initialize objective and gradient
     # TODO: could be acceptable to move this to beginning of step!
     f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
+    @show dual_iterate.fx dual_iterate.jac_fx dual_iterate.x
     dual_evaluator(dual_iterate.fx, dual_iterate.jac_fx, dual_iterate.x)
 
     return optimizer
