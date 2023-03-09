@@ -37,6 +37,8 @@ begin
     dual_iterate = dual_optimizer.iterate
 end
 
-for i in 1:100
+for i in 1:300
     step!(opt)
 end
+
+opt.iterate |> dump
