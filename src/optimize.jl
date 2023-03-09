@@ -128,9 +128,6 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         iterate.x_proposed .= iterate.x .+ iterate.Δx_proposed
         f_and_jac(iterate.fx_proposed, nothing, iterate.x_proposed)
 
-        # Compute approximation error 
-        approx_error = Iterators.map(-, iterate.gx_proposed, iterate.fx_proposed)
-
         # Increase ρ for non-conservative convex approximations.
         conservative = false
         for i in eachindex(iterate.ρ)
@@ -166,7 +163,7 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     end
 
     # Reduce ρ (be less conservative)
-    @. iterate.ρ = max(iterate.ρ, 1e-5)
+    @. iterate.ρ = max(iterate.ρ / 10, 1e-5)
 
     # is_primal &&
     #     @info "Completed 1 $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.jac_fx) repr(iterate.Δx_last) repr(iterate.Δx)

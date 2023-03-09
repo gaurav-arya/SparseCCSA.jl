@@ -32,7 +32,9 @@ function f_and_jac(fx, jac, u_and_t)
     t = @view u_and_t[(p + 1):(2p)]
     fx[1] = sum((G * u - y) .^ 2) + α * sum(t)
     fx[2:end] .= vcat(u - t, -u - t)
-    jac[1, :] .= vcat(2 * G' * (G * u - y), fill(α, p))
+    if jac !== nothing
+        jac[1, :] .= vcat(2 * G' * (G * u - y), fill(α, p))
+    end
     return nothing
 end
 
@@ -52,7 +54,13 @@ ub = fill(Inf, 2p)
 
 opt = init(f_and_jac, lb, ub, 2p, 2p; x0 = u_and_t, max_iters = 2, max_inner_iters = 10,
            max_dual_iters = 5, max_dual_inner_iters = 5, jac_prototype = jac);
+for i in 1:100
 step!(opt)
+end
+opt.iterate.x[1:p]
+opt.iterate.Δx
+scatter(opt.iterate.x)
+
 sol = solve!(opt)
 
 usol = sol.x[1:p]
