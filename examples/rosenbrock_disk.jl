@@ -91,16 +91,16 @@ end
 run_once_nlopt()
 
 run_once_mine();
+opt.iterate.fx[1]
+opt.iterate.x
+opt.iterate.ρ
 
 ##
 
 nlopt.numevals
 
-opt.iterate.fx[1]
 
 f([0.5, 0.5])[1]
 f([0.603, 0.397])[1]
 f(opt.iterate.x)[1]
 
-opt.iterate.x
-opt.iterate.ρ

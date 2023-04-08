@@ -26,11 +26,17 @@ function reinit!(optimizer::CCSAOptimizer{T}) where {T}
     optimizer.f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
 end
 
-function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}) where {T}
+function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbose=false) where {T}
     if optimizer.dual_optimizer !== nothing
         dual_optimizer = optimizer.dual_optimizer
         reinit!(dual_optimizer)
         sol = solve!(dual_optimizer)
+        if (verbose)
+		    @printf "CCSA dual converged in %d iters to g=%g:\n" sol.iters sol.fx[1]
+		    # for i in 1:m 
+            #     @printf "    CCSA y[%u]=%g, gc[%u]=%g\n" i y[i] i dd.gcval[i]
+            # end
+        end
         # We can form the dual evaluator with DualEvaluator(; iterate = optimizer.iterate, buffers=optimizer.buffers),
         # but since we have already formed it for the dual optimizer we just retrieve it here.  
         dual_evaluator = dual_optimizer.f_and_jac
@@ -104,7 +110,7 @@ What are the invariants / contracts?
 - optimizer.iterate.{fx,jac_fx} come from applying optimizer.f_and_jac at optimizer.iterate.x
 - optimizer.dual_optimizer contains a ref to optimizer.iterate, so updating latter implicitly updates the former. 
 """
-function step!(optimizer::CCSAOptimizer{T}) where {T}
+function step!(optimizer::CCSAOptimizer{T}; verbose=false) where {T}
     @unpack f_and_jac, iterate, max_inner_iters = optimizer
 
     is_primal = optimizer.dual_optimizer !== nothing
@@ -117,7 +123,7 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
 
     # Solve the dual problem, searching for a conservative solution. 
     for i in 1:max_inner_iters
-        propose_Δx!(iterate.Δx_proposed, optimizer)
+        propose_Δx!(iterate.Δx_proposed, optimizer; verbose)
 
         # Compute conservative approximation g at proposed point.
         w = sum(abs2, iterate.Δx_proposed ./ iterate.σ) / 2
@@ -138,7 +144,14 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
             end
         end
 
-        # Check if conservative
+        if verbose
+		    @printf "CCSA inner iteration: rho -> %g\n" iterate.ρ[1];
+            for i in 2:length(iterate.ρ)
+                @printf "                CCSA rhoc[%u] -> %g\n" i iterate.ρ[i];
+            end
+        end
+
+        # Break out if conservative
         if conservative || (i == max_inner_iters) 
             # (!conservative && is_primal) && @info "Could not find conservative approx for $str"
             break
@@ -165,33 +178,40 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
     # Reduce ρ (be less conservative)
     @. iterate.ρ = max(iterate.ρ / 10, 1e-5)
 
+    if verbose
+        @printf "CCSA outer iteration: rho -> %g\n" iterate.ρ[1];
+        for i in 2:length(iterate.ρ)
+            @printf "                CCSA rhoc[%u] -> %g\n" i iterate.ρ[i];
+        end
+    end
+
     # is_primal &&
     #     @info "Completed 1 $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.jac_fx) repr(iterate.Δx_last) repr(iterate.Δx)
     #=
-        if norm(opt.Δx, Inf) < opt.xtol_abs
-            opt.RET = :XTOL_ABS
+        if norm(optimizer.Δx, Inf) < optimizer.xtol_abs
+            optimizer.RET = :XTOL_ABS
             return
         end
-        if norm(opt.Δx, Inf) / norm(opt.x, Inf)  < opt.xtol_rel
-            opt.RET = :XTOL_REL
+        if norm(optimizer.Δx, Inf) / norm(optimizer.x, Inf)  < optimizer.xtol_rel
+            optimizer.RET = :XTOL_REL
             return
         end
-        if norm(Δxf, Inf) < opt.ftol_abs
-            opt.RET = :FTOL_REL
+        if norm(Δxf, Inf) < optimizer.ftol_abs
+            optimizer.RET = :FTOL_REL
             return
         end
-        if norm(Δxf, Inf) / norm(f, Inf) < opt.ftol_rel
-            opt.RET = :FTOL_REL
+        if norm(Δxf, Inf) / norm(f, Inf) < optimizer.ftol_rel
+            optimizer.RET = :FTOL_REL
             return
         end
     =#
 end
 
-function solve!(optimizer::CCSAOptimizer)
+function solve!(optimizer::CCSAOptimizer; verbose=false)
 
     # TODO: catch stopping conditions in opt and exit here
     for i in 1:(optimizer.max_iters)
-        step!(optimizer)
+        step!(optimizer; verbose)
     end
-    return Solution(optimizer.iterate.x, :MAX_ITERS)
+    return (; x=optimizer.iterate.x, fx=optimizer.iterate.fx, retcode=:MAX_ITERS, iters=optimizer.max_iters)
 end

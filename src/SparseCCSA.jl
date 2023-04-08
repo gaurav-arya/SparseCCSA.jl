@@ -3,6 +3,7 @@ module SparseCCSA
 using LinearAlgebra
 using UnPack
 using StaticArrays
+using Printf
 
 import Base.@kwdef
 
