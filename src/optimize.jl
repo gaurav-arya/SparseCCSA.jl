@@ -135,7 +135,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbose=false) where {T}
         f_and_jac(iterate.fx_proposed, nothing, iterate.x_proposed)
 
         # Increase ρ for non-conservative convex approximations.
-        conservative = false
+        conservative = true 
         for i in eachindex(iterate.ρ)
             approx_error = iterate.gx_proposed[i] - iterate.fx_proposed[i]
             conservative &= (approx_error > 0)
@@ -145,9 +145,10 @@ function step!(optimizer::CCSAOptimizer{T}; verbose=false) where {T}
         end
 
         if verbose
-		    @printf "CCSA inner iteration: rho -> %g\n" iterate.ρ[1];
-            for i in 2:length(iterate.ρ)
-                @printf "                CCSA rhoc[%u] -> %g\n" i iterate.ρ[i];
+		    @printf "CCSA inner iteration\n"
+            for i in 1:length(iterate.ρ)
+                @printf "                CCSA rho[%u] -> %g\n" i iterate.ρ[i];
+                @printf "                CCSA conservative[%u] -> %g\n" i iterate.gx_proposed[i] > iterate.fx_proposed[i];
             end
         end
 
