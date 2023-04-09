@@ -61,12 +61,13 @@ function cons1(x, grad)
     return f(x)[2]
 end
 
-function run_once_nlopt(evals=5)
+function run_once_nlopt(iters=1)
     nlopt = Opt(:LD_CCSAQ, 2)
     nlopt.lower_bounds = [-1.0, -1.0]
-    nlopt.maxeval = evals
+    nlopt.upper_bounds = [1.0, 1.0]
+    nlopt.maxeval = special_iters[iters] + 1
     # nlopt.xtol_rel = 1e-4
-    nlopt.params["verbosity"] = 2
+    nlopt.params["verbosity"] = 1
     nlopt.params["max_inner_iters"] = 1
 
     nlopt.min_objective = obj 
@@ -91,8 +92,10 @@ function run_once_mine(iters=1)
     return opt
 end
 
-opt = run_once_mine(1);
-run_once_nlopt(6)
+try run_once_mine(1) catch e end
+special_iters = [5, 7, 9, 11, 13, 14] # iters where nlopt output changes. +1 to see logged outer iter
+opt = run_once_mine(3);
+run_once_nlopt(3)
 
 opt.iterate.fx[1]
 (opt.iterate.x,)
