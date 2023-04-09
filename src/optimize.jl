@@ -33,7 +33,13 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbose=false) where {T}
         reinit!(dual_optimizer)
         sol = solve!(dual_optimizer)
         if (verbose)
-		    @printf "CCSA dual converged in %d iters to g=%g:\n" sol.iters sol.fx[1]
+		    @printf "CCSA dual converged in %d iters to g=%g:\n" sol.iters -sol.fx[1]
+            # neg_gλ = [0.0]
+            # neg_grad_gλ = [0.0]
+            # @show dual_optimizer.f_and_jac.buffers.Δx
+            # dual_optimizer.f_and_jac(neg_gλ, neg_grad_gλ, [29.022]) 
+            # @show -neg_gλ -neg_grad_gλ
+            # error("done")
 		    for i in 1:length(sol.x)
                 @printf "    CCSA x[%u]=%g\n" i sol.x[i]
             end

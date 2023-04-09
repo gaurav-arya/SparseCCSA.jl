@@ -91,8 +91,8 @@ function run_once_mine(iters=1)
     return opt
 end
 
-opt = run_once_mine(4);
-run_once_nlopt(14)
+opt = run_once_mine(1);
+run_once_nlopt(6)
 
 opt.iterate.fx[1]
 (opt.iterate.x,)
