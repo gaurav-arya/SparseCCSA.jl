@@ -38,7 +38,7 @@ begin
 end
 
 for i in 1:1
-    step!(opt)
+    step!(opt; verbose=true)
 end
 
 opt.iterate |> dump
@@ -61,12 +61,13 @@ function cons1(x, grad)
     return f(x)[2]
 end
 
-function run_once_nlopt()
-    nlopt = Opt(:LD_MMA, 2)
+function run_once_nlopt(evals=5)
+    nlopt = Opt(:LD_CCSAQ, 2)
     nlopt.lower_bounds = [-1.0, -1.0]
-    nlopt.maxeval = 6
+    nlopt.maxeval = evals
     # nlopt.xtol_rel = 1e-4
     nlopt.params["verbosity"] = 2
+    nlopt.params["max_inner_iters"] = 1
 
     nlopt.min_objective = obj 
     inequality_constraint!(nlopt, cons1)
@@ -75,7 +76,7 @@ function run_once_nlopt()
     return minf,minx,ret
 end
 
-function run_once_mine()
+function run_once_mine(iters=1)
     opt = init(f_and_jac, fill(-1.0, 2), fill(1.0, 2), n, m;
                x0 = [0.5, 0.5], max_iters = 5,
                max_inner_iters = 20,
@@ -84,16 +85,23 @@ function run_once_mine()
     dual_optimizer = opt.dual_optimizer
     dual_iterate = dual_optimizer.iterate
 
-    step!(opt)
+    for i in 1:iters
+        step!(opt; verbose=true)
+    end
     return opt
 end
 
-run_once_nlopt()
+run_once_nlopt(11)
+opt = run_once_mine(3);
 
-run_once_mine();
 opt.iterate.fx[1]
-opt.iterate.x
-opt.iterate.ρ
+(opt.iterate.x,)
+(opt.iterate.ρ,)
+(opt.iterate.σ,)
+
+f() = [3,4]
+
+(a,)
 
 ##
 

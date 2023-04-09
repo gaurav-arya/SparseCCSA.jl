@@ -6,13 +6,14 @@
     max_iters::Int # max number of iterations
 =#
 
-@kwdef struct CCSAOptimizer{T, F, L, D}
+@kwdef mutable struct CCSAOptimizer{T, F, L, D}
     f_and_jac::F # f(x) = (m+1, (m+1) x n linear operator)
     iterate::Iterate{T, L}
     buffers::DualBuffers{T}
     dual_optimizer::D
     max_iters::Int
     max_inner_iters::Int
+    iter::Int = 0
 end
 
 function reinit!(optimizer::CCSAOptimizer{T}) where {T}
@@ -33,9 +34,9 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbose=false) where {T}
         sol = solve!(dual_optimizer)
         if (verbose)
 		    @printf "CCSA dual converged in %d iters to g=%g:\n" sol.iters sol.fx[1]
-		    # for i in 1:m 
-            #     @printf "    CCSA y[%u]=%g, gc[%u]=%g\n" i y[i] i dd.gcval[i]
-            # end
+		    for i in 1:length(sol.x)
+                @printf "    CCSA x[%u]=%g\n" i sol.x[i]
+            end
         end
         # We can form the dual evaluator with DualEvaluator(; iterate = optimizer.iterate, buffers=optimizer.buffers),
         # but since we have already formed it for the dual optimizer we just retrieve it here.  
@@ -138,7 +139,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbose=false) where {T}
         conservative = true 
         for i in eachindex(iterate.ρ)
             approx_error = iterate.gx_proposed[i] - iterate.fx_proposed[i]
-            conservative &= (approx_error > 0)
+            conservative &= (approx_error >= 0)
             if approx_error < 0
                 iterate.ρ[i] = min(10.0 * iterate.ρ[i], 1.1 * (iterate.ρ[i] - approx_error / w))
             end
@@ -166,13 +167,15 @@ function step!(optimizer::CCSAOptimizer{T}; verbose=false) where {T}
     f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
 
     # Update σ based on monotonicity of changes
-    for i in eachindex(iterate.σ)
-        scaled = (sign(iterate.Δx[i]) == sign(iterate.Δx_last[i]) ? 1.2 : 0.7) * iterate.σ[i]
-        iterate.σ[i] = if isinf(iterate.ub[i]) || isinf(iterate.lb[i])
-            scaled
-        else
-            range = iterate.ub[i] - iterate.lb[i]
-            clamp(scaled, 1e-8 * range, 10 * range)
+    if (optimizer.iter > 0)
+        for i in eachindex(iterate.σ)
+            scaled = (sign(iterate.Δx[i]) == sign(iterate.Δx_last[i]) ? 1.2 : 0.7) * iterate.σ[i]
+            iterate.σ[i] = if isinf(iterate.ub[i]) || isinf(iterate.lb[i])
+                scaled
+            else
+                range = iterate.ub[i] - iterate.lb[i]
+                clamp(scaled, 1e-8 * range, 10 * range)
+            end
         end
     end
 
@@ -180,11 +183,16 @@ function step!(optimizer::CCSAOptimizer{T}; verbose=false) where {T}
     @. iterate.ρ = max(iterate.ρ / 10, 1e-5)
 
     if verbose
-        @printf "CCSA outer iteration: rho -> %g\n" iterate.ρ[1];
-        for i in 2:length(iterate.ρ)
-            @printf "                CCSA rhoc[%u] -> %g\n" i iterate.ρ[i];
+        @printf "CCSA outer iteration\n"
+        for i in 1:length(iterate.ρ)
+            @printf "                CCSA rho[%u] -> %g\n" i iterate.ρ[i];
+        end
+        for i in 1:length(iterate.σ)
+            @printf "                CCSA sigma[%u] -> %g\n" i iterate.σ[i];
         end
     end
+
+    optimizer.iter += 1 
 
     # is_primal &&
     #     @info "Completed 1 $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.jac_fx) repr(iterate.Δx_last) repr(iterate.Δx)
