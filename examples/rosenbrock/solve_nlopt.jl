@@ -14,8 +14,7 @@ function cons1(x, grad)
     return f(x)[2]
 end
 
-function run_once_nlopt(iters=1, evals=nothing)
-    evals = (evals === nothing) ? special_iters[iters] + 1 : evals
+function run_once_nlopt(evals)
     nlopt = Opt(:LD_CCSAQ, 2)
     nlopt.lower_bounds = [-1.0, -1.0]
     nlopt.upper_bounds = [1.0, 1.0]
@@ -46,61 +45,66 @@ function safe_scanf(buffer, fmt, args...)
     return out
 end
 
-open("nlopt_out.txt", "w") do io
-    redirect_stdout(io) do
-        run_once_nlopt(nothing, 20)
-        Base.Libc.flush_cstdio()
+function nlopt_df(evals) 
+
+    open("nlopt_out.txt", "w") do io
+        redirect_stdout(io) do
+            run_once_nlopt(evals)
+            Base.Libc.flush_cstdio()
+        end
     end
-end
-out_str = read(open("nlopt_out.txt"), String)
-lines = split(out_str, "\n")
 
-nlopt_res = DataFrame()
+    inner_iter_fmt = Scanf.format"""
+    CCSA dual converged in %d iters to g=%f:
+        CCSA y[0]=%f, gc[0]=%f
+    """
+    inner_iter2_fmt = Scanf.format"""
+    CCSA inner iteration: rho -> %f 
+                    CCSA rhoc[0] -> %f
+    """
+    outer_iter_fmt = Scanf.format"""
+    CCSA outer iteration: rho -> %f
+                    CCSA rhoc[0] -> %f
+    """
+    outer_iter_sigma_fmt = Scanf.format"""
+                    CCSA sigma[0] -> %f
+    """
 
-buffer = IOBuffer(out_str)
-
-inner_iter_fmt = Scanf.format"""
-CCSA dual converged in %d iters to g=%f:
-    CCSA y[0]=%f, gc[0]=%f
-"""
-inner_iter2_fmt = Scanf.format"""
-CCSA inner iteration: rho -> %f 
-                CCSA rhoc[0] -> %f
-"""
-outer_iter_fmt = Scanf.format"""
-CCSA outer iteration: rho -> %f
-                 CCSA rhoc[0] -> %f
-"""
-outer_iter_sigma_fmt = Scanf.format"""
-                 CCSA sigma[0] -> %f
-"""
-buffer = IOBuffer(out_str)
-safe_scanf(buffer, inner_iter, Int64, (Float64 for i in 1:3)...) 
-safe_scanf(buffer, inner_iter2, (Float64 for i in 1:2)...) 
-safe_scanf(buffer, outer_iter, (Float64 for i in 1:2)...) 
-safe_scanf(buffer, outer_iter_sigma, Float64) 
-
-open("out.txt", "w") do f
-    write(f, read(copy(buffer), String)) 
-end
-
-buffer = IOBuffer(out_str)
-while true 
-    # read one inner iteration
+    buffer = open("nlopt_out.txt") 
     d = DataFrame()
-    inner_iter = 0
-    while true
-        dual_iters, dual_obj = safe_scanf(buffer, inner_iter_fmt, Int64, (Float64 for i in 1:3)...) 
-        if (out = safe_scanf(buffer, inner_iter2_fmt, (Float64 for i in 1:2)...)) !== nothing
-            rho, rhoc = out
-        else
-            rho, rhoc = NaN, NaN
+    while true 
+        # read one inner iteration
+        d_inner = DataFrame()
+        inner_iter = 0
+        done = false
+        while true
+            if (out = safe_scanf(buffer, inner_iter_fmt, Int64, (Float64 for i in 1:3)...)) !== nothing
+                dual_iters, dual_obj = out
+            else
+                done = true
+            end
+            if (out = safe_scanf(buffer, inner_iter2_fmt, (Float64 for i in 1:2)...)) !== nothing
+                ρ = collect(out)
+            else
+                ρ = [NaN, NaN]
+                break
+            end
+            push!(d_inner, (;dual_iters, dual_obj, ρ))
+        end
+        done && break
+        out = safe_scanf(buffer, outer_iter_fmt, (Float64 for i in 1:2)...) 
+        if out === nothing
             break
         end
-        push!(d, (;dual_iters, dual_obj, rho, rhoc))
+        ρ = collect(out)
+        if (out = safe_scanf(buffer, outer_iter_sigma_fmt, Float64)) !== nothing
+        σ = collect(out)
+        else
+        σ = [NaN]
+        end
+        push!(d, (;d_inner, ρ, σ))
     end
-    break
-    # push!(nlopt_res, Dict(:iter => iter, :fx => NaN, :x => NaN, :ρ => NaN, :σ => NaN))
+    return d
 end
 
-@scanf
+nlopt_df(20)
