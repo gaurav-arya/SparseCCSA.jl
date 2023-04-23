@@ -13,7 +13,7 @@
     dual_optimizer::D
     max_iters::Int
     max_inner_iters::Int
-    iter::Int = 0
+    iter::Int = 1
     history::H = DataFrame()
 end
 
@@ -139,7 +139,11 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
             sol = solve!(dual_optimizer; verbosity=verbosity-1)
             neg_gλ = [0.0]
             neg_grad_gλ = [0.0]
-            dual_optimizer.f_and_jac(neg_gλ, neg_grad_gλ, [0.1])
+            dual_optimizer.f_and_jac(neg_gλ, neg_grad_gλ, sol.x)
+
+            if optimizer.iter == 2
+                @show neg_gλ neg_grad_gλ sol.x
+            end
 
             # @show -neg_gλ -neg_grad_gλ
             # error("done")
@@ -166,10 +170,13 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
 
         if verbosity > 0
             push!(inner_history, (;dual_iters=dual_sol.iters, dual_obj=-dual_sol.fx[1], 
-                                   dual_opt=dual_sol.x[1], ρ=copy(iterate.ρ), 
+                                   dual_opt=dual_sol.x[1], 
+                                   dual_grad=-neg_grad_gλ[1],
+                                   ρ=copy(iterate.ρ), 
+                                   x_proposed=copy(iterate.x_proposed),
+                                   Δx_proposed=copy(iterate.Δx_proposed),
                                    conservative=iterate.gx_proposed .> iterate.fx_proposed,
-                                   gλ=-neg_gλ[1], grad_gλ=-neg_grad_gλ[1],
-                                   Δx_proposed=copy(iterate.Δx_proposed)))
+            ))
         end
 
         # Break out if conservative
@@ -186,7 +193,8 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
     f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
 
     # Update σ based on monotonicity of changes
-    if (optimizer.iter > 0)
+    # only do this after the first iteration for consistency with nlopt
+    if (optimizer.iter > 1)
         for i in eachindex(iterate.σ)
             scaled = (sign(iterate.Δx[i]) == sign(iterate.Δx_last[i]) ? 1.2 : 0.7) * iterate.σ[i]
             iterate.σ[i] = if isinf(iterate.ub[i]) || isinf(iterate.lb[i])

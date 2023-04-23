@@ -57,6 +57,8 @@ function nlopt_df(evals)
     inner_iter_fmt = Scanf.format"""
     CCSA dual converged in %d iters to g=%f:
         CCSA y[0]=%f, gc[0]=%f
+        CCSA xcur[0]=%f
+        CCSA xcur[1]=%f
     """
     inner_iter2_fmt = Scanf.format"""
     CCSA inner iteration: rho -> %f 
@@ -82,18 +84,21 @@ function nlopt_df(evals)
         inner_iter = 0
         done = false
         while true
-            if (out = safe_scanf(buffer, inner_iter_fmt, Int64, (Float64 for i in 1:3)...)) !== nothing
-                dual_iters, dual_obj, dual_opt = out
+            if (out = safe_scanf(buffer, inner_iter_fmt, Int64, (Float64 for i in 1:5)...)) !== nothing
+                dual_iters, dual_obj, dual_opt, dual_grad, _x_proposed... = out
+                x_proposed = collect(_x_proposed)
             else
                 done = true
             end
             if (out = safe_scanf(buffer, inner_iter2_fmt, (Float64 for i in 1:2)...)) !== nothing
                 ρ = collect(out)
+                do_break = false
             else
                 ρ = [NaN, NaN]
-                break
+                do_break = true
             end
-            push!(inner_history, (;dual_iters, dual_obj, dual_opt, ρ))
+            push!(inner_history, (;dual_iters, dual_obj, dual_opt, dual_grad, ρ, x_proposed))
+            do_break && break
         end
         done && break
         safe_scanf(buffer, infeasible_point_fmt, String) # skip infeasible point log in hacky way
