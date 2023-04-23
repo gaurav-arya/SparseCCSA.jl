@@ -77,7 +77,7 @@ function nlopt_df(evals)
     d = DataFrame()
     while true 
         # read one inner iteration
-        d_inner = DataFrame()
+        inner_history = DataFrame()
         inner_iter = 0
         done = false
         while true
@@ -92,7 +92,7 @@ function nlopt_df(evals)
                 ρ = [NaN, NaN]
                 break
             end
-            push!(d_inner, (;dual_iters, dual_obj, ρ))
+            push!(inner_history, (;dual_iters, dual_obj, ρ))
         end
         done && break
         safe_scanf(buffer, infeasible_point_fmt, String) # skip infeasible point log in hacky way
@@ -106,7 +106,7 @@ function nlopt_df(evals)
         else
             σ = [NaN]
         end
-        push!(d, (;ρ, σ, d_inner))
+        push!(d, (;ρ, σ, inner_history))
     end
     if countlines(copy(buffer)) != 0
         @show countlines(copy(buffer))

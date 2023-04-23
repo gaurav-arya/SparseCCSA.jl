@@ -6,7 +6,7 @@
     max_iters::Int # max number of iterations
 =#
 
-@kwdef mutable struct CCSAOptimizer{T, F, L, D}
+@kwdef mutable struct CCSAOptimizer{T, F, L, D, H}
     f_and_jac::F # f(x) = (m+1, (m+1) x n linear operator)
     iterate::Iterate{T, L}
     buffers::DualBuffers{T}
@@ -14,6 +14,7 @@
     max_iters::Int
     max_inner_iters::Int
     iter::Int = 0
+    history::H = DataFrame()
 end
 
 function reinit!(optimizer::CCSAOptimizer{T}) where {T}
@@ -27,23 +28,12 @@ function reinit!(optimizer::CCSAOptimizer{T}) where {T}
     optimizer.f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
 end
 
-function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbose=false) where {T}
+function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
     if optimizer.dual_optimizer !== nothing
         dual_optimizer = optimizer.dual_optimizer
         reinit!(dual_optimizer)
-        sol = solve!(dual_optimizer)
-        if (verbose)
-		    # @printf "CCSA dual converged in %d iters to g=%g:\n" sol.iters -sol.fx[1]
-            # neg_gλ = [0.0]
-            # neg_grad_gλ = [0.0]
-            # @show dual_optimizer.f_and_jac.buffers.Δx
-            # dual_optimizer.f_and_jac(neg_gλ, neg_grad_gλ, [29.022]) 
-            # @show -neg_gλ -neg_grad_gλ
-            # error("done")
-		    # for i in 1:length(sol.x)
-            #     @printf "    CCSA x[%u]=%g\n" i sol.x[i]
-            # end
-        end
+        sol = solve!(dual_optimizer; verbosity=verbosity-1)
+
         # We can form the dual evaluator with DualEvaluator(; iterate = optimizer.iterate, buffers=optimizer.buffers),
         # but since we have already formed it for the dual optimizer we just retrieve it here.  
         dual_evaluator = dual_optimizer.f_and_jac
@@ -54,7 +44,8 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbose=false) where {T}
 
         Δx .= dual_evaluator.buffers.Δx
 
-        return nothing
+        # return dual soln object (used for logging)
+        return sol 
     else
         # the "dual dual" problem has 0 variables and 0 contraints, but running it allows us to retrieve the proposed Δx [length m].
         dual_dual_evaluator = DualEvaluator(; iterate = optimizer.iterate,
@@ -117,8 +108,8 @@ What are the invariants / contracts?
 - optimizer.iterate.{fx,jac_fx} come from applying optimizer.f_and_jac at optimizer.iterate.x
 - optimizer.dual_optimizer contains a ref to optimizer.iterate, so updating latter implicitly updates the former. 
 """
-function step!(optimizer::CCSAOptimizer{T}; verbose=false) where {T}
-    @unpack f_and_jac, iterate, max_inner_iters = optimizer
+function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
+    @unpack f_and_jac, iterate, max_inner_iters, dual_optimizer = optimizer
 
     is_primal = optimizer.dual_optimizer !== nothing
     str = is_primal ? "primal" : "dual"
@@ -129,8 +120,9 @@ function step!(optimizer::CCSAOptimizer{T}; verbose=false) where {T}
     # any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
 
     # Solve the dual problem, searching for a conservative solution. 
+    inner_history = verbosity > 0 ? DataFrame() : nothing
     for i in 1:max_inner_iters
-        propose_Δx!(iterate.Δx_proposed, optimizer; verbose)
+        dual_sol = propose_Δx!(iterate.Δx_proposed, optimizer; verbosity)
 
         # Compute conservative approximation g at proposed point.
         w = sum(abs2, iterate.Δx_proposed ./ iterate.σ) / 2
@@ -151,7 +143,19 @@ function step!(optimizer::CCSAOptimizer{T}; verbose=false) where {T}
             end
         end
 
-        if verbose
+        if verbosity > 0
+            push!(inner_history, (;dual_iters=dual_sol.iters, dual_obj=-dual_sol.fx[1], ρ=copy(iterate.ρ)))
+		    # @printf "CCSA dual converged in %d iters to g=%g:\n" sol.iters -sol.fx[1]
+            # neg_gλ = [0.0]
+            # neg_grad_gλ = [0.0]
+            # @show dual_optimizer.f_and_jac.buffers.Δx
+            # dual_optimizer.f_and_jac(neg_gλ, neg_grad_gλ, [29.022]) 
+            # @show -neg_gλ -neg_grad_gλ
+            # error("done")
+		    # for i in 1:length(sol.x)
+            #     @printf "    CCSA x[%u]=%g\n" i sol.x[i]
+            # end
+
 		    # @printf "CCSA inner iteration\n"
             # for i in 1:length(iterate.ρ)
             #     @printf "                CCSA rho[%u] -> %g\n" i iterate.ρ[i];
@@ -188,14 +192,16 @@ function step!(optimizer::CCSAOptimizer{T}; verbose=false) where {T}
     # Reduce ρ (be less conservative)
     @. iterate.ρ = max(iterate.ρ / 10, 1e-5)
 
-    if verbose
-        @printf "CCSA outer iteration\n"
-        for i in 1:length(iterate.ρ)
-            @printf "                CCSA rho[%u] -> %g\n" i iterate.ρ[i];
-        end
-        for i in 1:length(iterate.σ)
-            @printf "                CCSA sigma[%u] -> %g\n" i iterate.σ[i];
-        end
+    if verbosity > 0
+        @show verbosity
+        push!(optimizer.history, (;ρ=copy(iterate.ρ), σ=copy(iterate.σ), inner_history))
+        # @printf "CCSA outer iteration\n"
+        # for i in 1:length(iterate.ρ)
+        #     @printf "                CCSA rho[%u] -> %g\n" i iterate.ρ[i];
+        # end
+        # for i in 1:length(iterate.σ)
+        #     @printf "                CCSA sigma[%u] -> %g\n" i iterate.σ[i];
+        # end
     end
 
     optimizer.iter += 1 
@@ -222,11 +228,11 @@ function step!(optimizer::CCSAOptimizer{T}; verbose=false) where {T}
     =#
 end
 
-function solve!(optimizer::CCSAOptimizer; verbose=false)
+function solve!(optimizer::CCSAOptimizer; verbosity=1)
 
     # TODO: catch stopping conditions in opt and exit here
     for i in 1:(optimizer.max_iters)
-        step!(optimizer; verbose)
+        step!(optimizer; verbosity)
     end
     return (; x=optimizer.iterate.x, fx=optimizer.iterate.fx, retcode=:MAX_ITERS, iters=optimizer.max_iters)
 end
