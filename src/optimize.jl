@@ -38,6 +38,7 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
         # but since we have already formed it for the dual optimizer we just retrieve it here.  
         dual_evaluator = dual_optimizer.f_and_jac
         # Run dual evaluator at dual opt and extract Δx from evaluator's buffer
+        # Perhaps this isn't actually necessary? i.e. maybe dual_evaluator.buffers.Δx always (?) already has the right thing
         dual_iterate = dual_optimizer.iterate
         dual_evaluator(dual_iterate.fx, dual_iterate.jac_fx, dual_iterate.x)
         # @show dual_iterate.x sol.x
@@ -133,23 +134,13 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
         iterate.x_proposed .= iterate.x .+ iterate.Δx_proposed
         f_and_jac(iterate.fx_proposed, nothing, iterate.x_proposed)
 
-        # Increase ρ for non-conservative convex approximations.
-        conservative = true 
-        for i in eachindex(iterate.ρ)
-            approx_error = iterate.gx_proposed[i] - iterate.fx_proposed[i]
-            conservative &= (approx_error >= 0)
-            if approx_error < 0
-                iterate.ρ[i] = min(10.0 * iterate.ρ[i], 1.1 * (iterate.ρ[i] - approx_error / w))
-            end
-        end
-
         if verbosity > 0
-            push!(inner_history, (;dual_iters=dual_sol.iters, dual_obj=-dual_sol.fx[1], ρ=copy(iterate.ρ)))
 		    # @printf "CCSA dual converged in %d iters to g=%g:\n" sol.iters -sol.fx[1]
-            # neg_gλ = [0.0]
-            # neg_grad_gλ = [0.0]
-            # @show dual_optimizer.f_and_jac.buffers.Δx
-            # dual_optimizer.f_and_jac(neg_gλ, neg_grad_gλ, [29.022]) 
+            sol = solve!(dual_optimizer; verbosity=verbosity-1)
+            neg_gλ = [0.0]
+            neg_grad_gλ = [0.0]
+            dual_optimizer.f_and_jac(neg_gλ, neg_grad_gλ, [0.1])
+
             # @show -neg_gλ -neg_grad_gλ
             # error("done")
 		    # for i in 1:length(sol.x)
@@ -161,6 +152,24 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
             #     @printf "                CCSA rho[%u] -> %g\n" i iterate.ρ[i];
             #     @printf "                CCSA conservative[%u] -> %g\n" i iterate.gx_proposed[i] > iterate.fx_proposed[i];
             # end
+        end
+
+        # Increase ρ for non-conservative convex approximations.
+        conservative = true 
+        for i in eachindex(iterate.ρ)
+            approx_error = iterate.gx_proposed[i] - iterate.fx_proposed[i]
+            conservative &= (approx_error >= 0)
+            if approx_error < 0
+                iterate.ρ[i] = min(10.0 * iterate.ρ[i], 1.1 * (iterate.ρ[i] - approx_error / w))
+            end
+        end
+
+        if verbosity > 0
+            push!(inner_history, (;dual_iters=dual_sol.iters, dual_obj=-dual_sol.fx[1], 
+                                   dual_opt=dual_sol.x[1], ρ=copy(iterate.ρ), 
+                                   conservative=iterate.gx_proposed .> iterate.fx_proposed,
+                                   gλ=-neg_gλ[1], grad_gλ=-neg_grad_gλ[1],
+                                   Δx_proposed=copy(iterate.Δx_proposed)))
         end
 
         # Break out if conservative
@@ -193,8 +202,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
     @. iterate.ρ = max(iterate.ρ / 10, 1e-5)
 
     if verbosity > 0
-        @show verbosity
-        push!(optimizer.history, (;ρ=copy(iterate.ρ), σ=copy(iterate.σ), inner_history))
+        push!(optimizer.history, (;ρ=copy(iterate.ρ), σ=copy(iterate.σ), x=copy(iterate.x), fx=copy(iterate.fx), inner_history))
         # @printf "CCSA outer iteration\n"
         # for i in 1:length(iterate.ρ)
         #     @printf "                CCSA rho[%u] -> %g\n" i iterate.ρ[i];

@@ -21,7 +21,7 @@ function run_once_nlopt(evals)
     nlopt.maxeval = evals 
     nlopt.xtol_rel = 0.0
     nlopt.xtol_abs = 0.0
-    nlopt.params["verbosity"] = 1
+    nlopt.params["verbosity"] = 2
     nlopt.params["max_inner_iters"] = 1
 
     nlopt.min_objective = obj 
@@ -68,6 +68,7 @@ function nlopt_df(evals)
     """
     outer_iter_sigma_fmt = Scanf.format"""
                     CCSA sigma[0] -> %f
+                    CCSA sigma[1] -> %f
     """
     infeasible_point_fmt = Scanf.format"""
     CCSA - using infeasible point%s
@@ -82,7 +83,7 @@ function nlopt_df(evals)
         done = false
         while true
             if (out = safe_scanf(buffer, inner_iter_fmt, Int64, (Float64 for i in 1:3)...)) !== nothing
-                dual_iters, dual_obj = out
+                dual_iters, dual_obj, dual_opt = out
             else
                 done = true
             end
@@ -92,7 +93,7 @@ function nlopt_df(evals)
                 ρ = [NaN, NaN]
                 break
             end
-            push!(inner_history, (;dual_iters, dual_obj, ρ))
+            push!(inner_history, (;dual_iters, dual_obj, dual_opt, ρ))
         end
         done && break
         safe_scanf(buffer, infeasible_point_fmt, String) # skip infeasible point log in hacky way
@@ -101,7 +102,7 @@ function nlopt_df(evals)
             break
         end
         ρ = collect(out)
-        if (out = safe_scanf(buffer, outer_iter_sigma_fmt, Float64)) !== nothing
+        if (out = safe_scanf(buffer, outer_iter_sigma_fmt, (Float64 for i in 1:2)...)) !== nothing
             σ = collect(out)
         else
             σ = [NaN]

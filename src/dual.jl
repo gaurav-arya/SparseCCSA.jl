@@ -75,7 +75,7 @@ function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ) where {T}
     λ_all[1] = 1
     λ_all[2:end] .= λ
 
-    a .= dot(λ_all, ρ) ./ (2 .* σ .^ 2)
+    a .= dot(λ_all, ρ) ./ (2 .* σ .^ 2) 
     mul!(b, jac_fx', λ_all)
     @. Δx = -b / (2 * a)
     @. Δx = clamp(Δx, -σ, σ)

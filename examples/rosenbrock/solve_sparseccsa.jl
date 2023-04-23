@@ -5,7 +5,6 @@ function sparseccsa_df(iters=1)
                max_dual_iters = 50, max_dual_inner_iters = 50,
                jac_prototype = zeros(m + 1, n))
     dual_optimizer = opt.dual_optimizer
-    dual_iterate = dual_optimizer.iterate
 
     # d = DataFrame()
     for i in 1:iters
