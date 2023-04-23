@@ -106,7 +106,7 @@ function nlopt_df(evals)
         else
             σ = [NaN]
         end
-        push!(d, (;d_inner, ρ, σ))
+        push!(d, (;ρ, σ, d_inner))
     end
     if countlines(copy(buffer)) != 0
         @show countlines(copy(buffer))
@@ -114,5 +114,3 @@ function nlopt_df(evals)
     end
     return d
 end
-
-nlopt_df(500)[1:9, :]
