@@ -75,10 +75,10 @@ function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ) where {T}
     λ_all[1] = 1
     λ_all[2:end] .= λ
 
-    # @show σ
     a .= dot(λ_all, ρ) ./ (2 .* σ .^ 2) # nlopt u = a * 2σ^2
     mul!(b, jac_fx', λ_all) # nlopt v = b
     @. Δx = -b / (2 * a) # nlopt writes -σ^2 * v / u = -σ^2 * b / (a * 2σ^2) = -b / (2 * a)
+    # @show Δx
     @. Δx = clamp(Δx, -σ, σ)
     # @show lb ub
     # @show Δx
