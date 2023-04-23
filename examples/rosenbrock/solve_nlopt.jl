@@ -19,7 +19,8 @@ function run_once_nlopt(evals)
     nlopt.lower_bounds = [-1.0, -1.0]
     nlopt.upper_bounds = [1.0, 1.0]
     nlopt.maxeval = evals 
-    # nlopt.xtol_rel = 1e-4
+    nlopt.xtol_rel = 0.0
+    nlopt.xtol_abs = 0.0
     nlopt.params["verbosity"] = 1
     nlopt.params["max_inner_iters"] = 1
 
@@ -46,7 +47,6 @@ function safe_scanf(buffer, fmt, args...)
 end
 
 function nlopt_df(evals) 
-
     open("nlopt_out.txt", "w") do io
         redirect_stdout(io) do
             run_once_nlopt(evals)
@@ -69,8 +69,11 @@ function nlopt_df(evals)
     outer_iter_sigma_fmt = Scanf.format"""
                     CCSA sigma[0] -> %f
     """
+    infeasible_point_fmt = Scanf.format"""
+    CCSA - using infeasible point%s
+    """
 
-    buffer = open("nlopt_out.txt") 
+    buffer = IOBuffer(read(open("nlopt_out.txt"), String)) # easier to copy
     d = DataFrame()
     while true 
         # read one inner iteration
@@ -92,19 +95,24 @@ function nlopt_df(evals)
             push!(d_inner, (;dual_iters, dual_obj, ρ))
         end
         done && break
+        safe_scanf(buffer, infeasible_point_fmt, String) # skip infeasible point log in hacky way
         out = safe_scanf(buffer, outer_iter_fmt, (Float64 for i in 1:2)...) 
         if out === nothing
             break
         end
         ρ = collect(out)
         if (out = safe_scanf(buffer, outer_iter_sigma_fmt, Float64)) !== nothing
-        σ = collect(out)
+            σ = collect(out)
         else
-        σ = [NaN]
+            σ = [NaN]
         end
         push!(d, (;d_inner, ρ, σ))
+    end
+    if countlines(copy(buffer)) != 0
+        @show countlines(copy(buffer))
+        write("debug.txt", read(copy(buffer), String))
     end
     return d
 end
 
-nlopt_df(20)
+nlopt_df(500)[1:9, :]
