@@ -110,7 +110,7 @@ What are the invariants / contracts?
 - optimizer.iterate.{fx,jac_fx} come from applying optimizer.f_and_jac at optimizer.iterate.x
 - optimizer.dual_optimizer contains a ref to optimizer.iterate, so updating latter implicitly updates the former. 
 """
-function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
+function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
     @unpack f_and_jac, iterate, max_inner_iters, dual_optimizer = optimizer
 
     # Solve the dual problem, searching for a conservative solution. 
@@ -215,7 +215,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
     =#
 end
 
-function solve!(optimizer::CCSAOptimizer; verbosity=1)
+function solve!(optimizer::CCSAOptimizer; verbosity=0)
 
     # TODO: catch stopping conditions in opt and exit here
     for i in 1:(optimizer.max_iters)
