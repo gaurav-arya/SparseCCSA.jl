@@ -6,42 +6,48 @@
     max_iters::Int # max number of iterations
 =#
 
-@kwdef struct CCSAOptimizer{T, F, L, D}
+@kwdef mutable struct CCSAOptimizer{T, F, L, D, H}
     f_and_jac::F # f(x) = (m+1, (m+1) x n linear operator)
     iterate::Iterate{T, L}
     buffers::DualBuffers{T}
     dual_optimizer::D
     max_iters::Int
     max_inner_iters::Int
+    iter::Int = 1
+    history::H = DataFrame()
 end
 
 function reinit!(optimizer::CCSAOptimizer{T}) where {T}
     iterate = optimizer.iterate
 
+    # TODO: this logic should be in the same place as the logic for initializing the iterate, whereever that may be
     iterate.ρ .= one(T) # reinitialize penality weights
     iterate.σ .= one(T) # reinitialize radii of trust region
     iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
-    iterate.Δx .= zero(T)
-    iterate.Δx_last .= zero(T)
+    iterate.x_prev .= zero(T)
+    iterate.x_prevprev .= zero(T)
     optimizer.f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
 end
 
-function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}) where {T}
+function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
     if optimizer.dual_optimizer !== nothing
         dual_optimizer = optimizer.dual_optimizer
         reinit!(dual_optimizer)
-        sol = solve!(dual_optimizer)
+        sol = solve!(dual_optimizer; verbosity=verbosity-1)
+
         # We can form the dual evaluator with DualEvaluator(; iterate = optimizer.iterate, buffers=optimizer.buffers),
         # but since we have already formed it for the dual optimizer we just retrieve it here.  
         dual_evaluator = dual_optimizer.f_and_jac
         # Run dual evaluator at dual opt and extract Δx from evaluator's buffer
+        # Perhaps this isn't actually necessary? i.e. maybe dual_evaluator.buffers.Δx always (?) already has the right thing
         dual_iterate = dual_optimizer.iterate
         dual_evaluator(dual_iterate.fx, dual_iterate.jac_fx, dual_iterate.x)
         # @show dual_iterate.x sol.x
 
         Δx .= dual_evaluator.buffers.Δx
 
-        return nothing
+        # return dual soln object (used for logging)
+        return sol 
     else
         # the "dual dual" problem has 0 variables and 0 contraints, but running it allows us to retrieve the proposed Δx [length m].
         dual_dual_evaluator = DualEvaluator(; iterate = optimizer.iterate,
@@ -104,20 +110,13 @@ What are the invariants / contracts?
 - optimizer.iterate.{fx,jac_fx} come from applying optimizer.f_and_jac at optimizer.iterate.x
 - optimizer.dual_optimizer contains a ref to optimizer.iterate, so updating latter implicitly updates the former. 
 """
-function step!(optimizer::CCSAOptimizer{T}) where {T}
-    @unpack f_and_jac, iterate, max_inner_iters = optimizer
-
-    is_primal = optimizer.dual_optimizer !== nothing
-    str = is_primal ? "primal" : "dual"
-    # is_primal &&
-    #     @info "Starting $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.jac_fx)
-
-    # Check feasibility
-    # any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
+function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
+    @unpack f_and_jac, iterate, max_inner_iters, dual_optimizer = optimizer
 
     # Solve the dual problem, searching for a conservative solution. 
+    inner_history = verbosity > 0 ? DataFrame() : nothing
     for i in 1:max_inner_iters
-        propose_Δx!(iterate.Δx_proposed, optimizer)
+        dual_sol = propose_Δx!(iterate.Δx_proposed, optimizer; verbosity)
 
         # Compute conservative approximation g at proposed point.
         w = sum(abs2, iterate.Δx_proposed ./ iterate.σ) / 2
@@ -129,69 +128,97 @@ function step!(optimizer::CCSAOptimizer{T}) where {T}
         f_and_jac(iterate.fx_proposed, nothing, iterate.x_proposed)
 
         # Increase ρ for non-conservative convex approximations.
-        conservative = false
+        conservative = true 
         for i in eachindex(iterate.ρ)
             approx_error = iterate.gx_proposed[i] - iterate.fx_proposed[i]
-            conservative &= (approx_error > 0)
+            conservative &= (approx_error >= 0)
             if approx_error < 0
                 iterate.ρ[i] = min(10.0 * iterate.ρ[i], 1.1 * (iterate.ρ[i] - approx_error / w))
             end
         end
 
-        # Check if conservative
+        if verbosity > 0
+            push!(inner_history, (;dual_iters=dual_sol.iters, dual_obj=-dual_sol.fx[1], 
+                                   dual_opt=dual_sol.x[1], 
+                                   ρ=copy(iterate.ρ), 
+                                   x_proposed=copy(iterate.x_proposed),
+                                   Δx_proposed=copy(iterate.Δx_proposed),
+                                   conservative=iterate.gx_proposed .> iterate.fx_proposed,
+            ))
+        end
+
+        # We are guaranteed to have a better optimum once we find a conservative approximation.
+        # but even if not conservative, we can check if we have a better optimum by luck, and
+        # therefore update our current point a bit more aggressively within the inner iterations,
+        # so long as we are still feasible. (Done mostly for consistency with nlopt.) 
+        feasible = all(<=(0), iterate.fx_proposed[2:end])
+        better_opt = iterate.fx_proposed[1] < iterate.fx[1]
+        if feasible && better_opt
+            # Update iterate
+            iterate.x .= iterate.x_proposed
+            f_and_jac(iterate.fx, iterate.jac_fx, iterate.x) # TODO: can avoid this call if we store jac_fx_proposed in prev call
+        end
+
+        # Break out if conservative
         if conservative || (i == max_inner_iters) 
             # (!conservative && is_primal) && @info "Could not find conservative approx for $str"
             break
         end
     end
 
-    # Update iterate
-    iterate.Δx_last .= iterate.Δx
-    iterate.Δx .= iterate.Δx_proposed
-    iterate.x .= iterate.x_proposed
-    f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
-
     # Update σ based on monotonicity of changes
-    for i in eachindex(iterate.σ)
-        scaled = (sign(iterate.Δx[i]) == sign(iterate.Δx_last[i]) ? 1.2 : 0.7) * iterate.σ[i]
-        iterate.σ[i] = if isinf(iterate.ub[i]) || isinf(iterate.lb[i])
-            scaled
-        else
-            range = iterate.ub[i] - iterate.lb[i]
-            clamp(scaled, 1e-8 * range, 10 * range)
+    # only do this after the first iteration, similar to nlopt, since this should be a nullop after first update
+    if (optimizer.iter > 1)
+        for i in eachindex(iterate.σ)
+            Δx2 = (iterate.x[i] - iterate.x_prev[i]) * (iterate.x_prev[i] - iterate.x_prevprev[i])
+            scaled = (Δx2 < 0 ? 0.7 : (Δx2 > 0 ? 1.2 : 1)) * iterate.σ[i]
+            iterate.σ[i] = if isinf(iterate.ub[i]) || isinf(iterate.lb[i])
+                scaled
+            else
+                range = iterate.ub[i] - iterate.lb[i]
+                clamp(scaled, 1e-8 * range, 10 * range)
+            end
         end
     end
+
+    # Push new x into storage of previous x's
+    iterate.x_prevprev .= iterate.x_prev
+    iterate.x_prev .= iterate.x
 
     # Reduce ρ (be less conservative)
     @. iterate.ρ = max(iterate.ρ / 10, 1e-5)
 
-    # is_primal &&
-    #     @info "Completed 1 $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.jac_fx) repr(iterate.Δx_last) repr(iterate.Δx)
+    if verbosity > 0
+        push!(optimizer.history, (;ρ=copy(iterate.ρ), σ=copy(iterate.σ), x=copy(iterate.x), fx=copy(iterate.fx), inner_history))
+    end
+
+    optimizer.iter += 1 
+
     #=
-        if norm(opt.Δx, Inf) < opt.xtol_abs
-            opt.RET = :XTOL_ABS
+        if norm(optimizer.Δx, Inf) < optimizer.xtol_abs
+            optimizer.RET = :XTOL_ABS
             return
         end
-        if norm(opt.Δx, Inf) / norm(opt.x, Inf)  < opt.xtol_rel
-            opt.RET = :XTOL_REL
+        if norm(optimizer.Δx, Inf) / norm(optimizer.x, Inf)  < optimizer.xtol_rel
+            optimizer.RET = :XTOL_REL
             return
         end
-        if norm(Δxf, Inf) < opt.ftol_abs
-            opt.RET = :FTOL_REL
+        if norm(Δxf, Inf) < optimizer.ftol_abs
+            optimizer.RET = :FTOL_REL
             return
         end
-        if norm(Δxf, Inf) / norm(f, Inf) < opt.ftol_rel
-            opt.RET = :FTOL_REL
+        if norm(Δxf, Inf) / norm(f, Inf) < optimizer.ftol_rel
+            optimizer.RET = :FTOL_REL
             return
         end
     =#
 end
 
-function solve!(optimizer::CCSAOptimizer)
+function solve!(optimizer::CCSAOptimizer; verbosity=0)
 
     # TODO: catch stopping conditions in opt and exit here
     for i in 1:(optimizer.max_iters)
-        step!(optimizer)
+        step!(optimizer; verbosity)
     end
-    return Solution(optimizer.iterate.x, :MAX_ITERS)
+    return (; x=optimizer.iterate.x, fx=optimizer.iterate.fx, retcode=:MAX_ITERS, iters=optimizer.max_iters)
 end

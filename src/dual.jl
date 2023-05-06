@@ -11,20 +11,25 @@ iterate, which is sufficient to specify the dual problem.
     lb::Vector{T} # n x 1 lower bounds on solution
     ub::Vector{T} # n x 1 upper bounds on solution
     # Below are buffers used by inner iteration logic. TODO: move into separate struct, defined in optimize.jl?
-    Δx::Vector{T} # n x 1 xᵏ⁺¹ - xᵏ
-    Δx_last::Vector{T} # n x 1 xᵏ - xᵏ⁻¹
-    gx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints
-    x_proposed::Vector{T}
     Δx_proposed::Vector{T}
+    x_proposed::Vector{T}
+    gx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints
     fx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints
+    # Buffers used in outer iteration logic. TODO: another separate struct?
+    x_prev::Vector{T} # n x 1 xᵏ⁻¹ 
+    x_prevprev::Vector{T} # n x 1 xᵏ⁻²
 end
 
 function init_iterate(; n, m, x0::Vector{T}, jac_prototype, lb, ub) where {T}
+    σ = map(lb, ub) do lb, ub
+        (isinf(lb) || isinf(ub)) ? 1.0 : (ub - lb) / 2.0
+    end
     return Iterate(; x = x0, fx = zeros(T, m + 1), jac_fx = copy(jac_prototype),
                    ρ = ones(T, m + 1),
-                   σ = ones(T, n), lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n),
-                   gx_proposed = zeros(T, m + 1), x_proposed = zeros(T, n),
-                   Δx_proposed = zeros(T, n), fx_proposed = zeros(T, m + 1))
+                   σ, lb, ub, 
+                   Δx_proposed = zeros(T, n), x_proposed = zeros(T, n),
+                   gx_proposed = zeros(T, m + 1), fx_proposed = zeros(T, m + 1),
+                   x_prev = copy(x0), x_prevprev = copy(x0))
 end
 
 """
@@ -67,7 +72,7 @@ Set the negated dual gradient neg_grad_gλ [shape 1 x m] and negated dual object
 in-place to their new values at λ [length = m].
 The evaluator's internal buffer Δx is also set so that xᵏ + Δx is the optimal primal.
 """
-function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ) where {T}
+function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ; debug=false) where {T}
     @unpack σ, ρ, x, fx, jac_fx, lb, ub = evaluator.iterate # these should be read-only
     @unpack a, b, Δx, λ_all, grad_gλ_all = evaluator.buffers
     # The dual evaluation turns out to be simpler to express with λ_{1...m} left-augmented by λ_0 = 1.
@@ -75,10 +80,23 @@ function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ) where {T}
     λ_all[1] = 1
     λ_all[2:end] .= λ
 
-    a .= dot(λ_all, ρ) ./ (2 .* σ .^ 2)
-    mul!(b, jac_fx', λ_all)
-    @. Δx = clamp(-b / (2 * a), -σ, σ)
+    debug && (@show λ_all)
+    debug && (@show ρ)
+    debug && (@show σ)
+
+    a .= dot(λ_all, ρ) ./ (2 .* σ .^ 2) # nlopt u = a * 2σ^2
+    mul!(b, jac_fx', λ_all) # nlopt v = b
+    @. Δx = -b / (2 * a) # nlopt writes -σ^2 * v / u = -σ^2 * b / (a * 2σ^2) = -b / (2 * a)
+    # @show Δx
+    @. Δx = clamp(Δx, -σ, σ)
+    # @show lb ub
+    # @show Δx
+    # @show x
     @. Δx = clamp(Δx, lb - x, ub - x)
+
+    debug && (@show Δx)
+    debug && (@show a)
+    debug && (@show b)
 
     if (neg_grad_gλ !== nothing) && (length(neg_grad_gλ) > 0)
         # Below we populate grad_gλ_all, i.e. the gradient WRT λ_0, ..., λ_m,
