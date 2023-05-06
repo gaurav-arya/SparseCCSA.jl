@@ -3,35 +3,32 @@ include("define_rosenbrock.jl")
 include("solve_nlopt.jl")
 include("solve_sparseccsa.jl")
 
-df_n = nlopt_df(30)
+run_once_nlopt(8)
+df_sp = sparseccsa_df(2)
 
-run_once_nlopt(7)
-Base.Libc.flush_cstdio()
+df_sp.inner_history[2]
 
-df_n[1:5, :]
-df_sp = sparseccsa_df(3)
+df_n = nlopt_df(10)
+df_sp = sparseccsa_df(2)
 
-df_sp[1,:].inner_history
-df_sp[3,:].x - df_sp[2,:].x 
-df_sp[2,:].inner_history
-x2_n - df_sp[1,:].x ≈ df_sp[2,:].inner_history.Δx_proposed[end]
+df_n
+df_sp[1, :]
+sparse_n = df_sp.inner_history[2]
+inner_n = df_n.inner_history[2]
+df_n.inner_history[2].x_proposed[end] - df_n.inner_history[1].x_proposed[end]
 
-##
-df_sp[3,:].inner_history.Δx_proposed[end]
-df_sp[3,:].x - df_sp[2,:].x ≈ df_sp[3,:].inner_history.Δx_proposed[end]
-x3_n - df_sp[2,:].x
-##
-df_sp[3,:].inner_history
-df_n[3,:].inner_history
-x3_n
+fx = zeros(2)
+jac_fx = zeros(2, 2)
+f_and_jac(fx, jac_fx, df_sp.x[1])
+jac_fx
+
+inner3_n.ρ .- sparse3_n.ρ
 
 
-df_sp[1, :].x
-x1_n
-x2_n ≈ df_sp[2,:].x
-x3_n - df_sp[3,:].x
-df_n[2,:].inner_history
-df_n[3, :]
+
+
+
+# some plotting
 
 using GLMakie
 lines(first.(df_n.σ))

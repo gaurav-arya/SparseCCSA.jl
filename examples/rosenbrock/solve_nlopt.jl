@@ -41,10 +41,19 @@ function safe_scanf(buffer, fmt, args...)
     n, out... = scanf(buffer, fmt, args...)
     if n != length(args)
         seek(buffer, pos)
+        # skip ignored lines
+        ln = readline(buffer)
+        if (startswith(ln, "j=") || startswith(ln, "dx =")) || startswith(ln, "u =") || startswith(ln, "v =") || startswith(ln, "dfdx") || startswith(ln, "dfcdx") || startswith(ln, "y:")
+           return safe_scanf(buffer, fmt, args...)
+        end
+        seek(buffer, pos)
         return nothing
     end
     return out
 end
+
+buffer = IOBuffer(read(open("nlopt_out.txt"), String)) # easier to copy
+readline(buffer)
 
 function nlopt_df(evals) 
     open("nlopt_out.txt", "w") do io

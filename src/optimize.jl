@@ -139,10 +139,12 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
             sol = solve!(dual_optimizer; verbosity=verbosity-1)
             neg_gλ = [0.0]
             neg_grad_gλ = [0.0]
-            dual_optimizer.f_and_jac(neg_gλ, neg_grad_gλ, sol.x)
 
-            if optimizer.iter == 2
+            if optimizer.iter == 1 && i == 3
+                iterate |> dump
+                dual_optimizer.f_and_jac(neg_gλ, neg_grad_gλ, sol.x; debug = true)
                 @show neg_gλ neg_grad_gλ sol.x
+                # f_and_jac(iterate.fx_proposed, nothing, iterate.x_proposed)
             end
 
             # @show -neg_gλ -neg_grad_gλ
@@ -179,18 +181,25 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
             ))
         end
 
+        feasible = all(<=(0), iterate.fx_proposed[2:end])
+        better_opt = iterate.fx_proposed[1] < iterate.fx[1]
+        # we are guaranteed to have a better optimum once we find a conservative approximation.
+        # but we can update our current point a bit more aggressively within the inner iterations,
+        # so long as we are still feasible. (done mostly for consistency with nlopt) 
+        if feasible && better_opt
+            # Update iterate
+            iterate.Δx_last .= iterate.Δx
+            iterate.Δx .= iterate.Δx_proposed
+            iterate.x .= iterate.x_proposed
+            f_and_jac(iterate.fx, iterate.jac_fx, iterate.x) # TODO: can avoid this call if we store jac_fx_proposed in prev call
+        end
+
         # Break out if conservative
         if conservative || (i == max_inner_iters) 
             # (!conservative && is_primal) && @info "Could not find conservative approx for $str"
             break
         end
     end
-
-    # Update iterate
-    iterate.Δx_last .= iterate.Δx
-    iterate.Δx .= iterate.Δx_proposed
-    iterate.x .= iterate.x_proposed
-    f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
 
     # Update σ based on monotonicity of changes
     # only do this after the first iteration for consistency with nlopt
