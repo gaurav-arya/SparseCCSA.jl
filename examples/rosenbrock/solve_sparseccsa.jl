@@ -6,10 +6,8 @@ function sparseccsa_df(iters=1)
                jac_prototype = zeros(m + 1, n))
     dual_optimizer = opt.dual_optimizer
 
-    # d = DataFrame()
     for i in 1:iters
         step!(opt; verbosity=1)
-        # push!(d, (;ρ = copy(opt.iterate.ρ), σ = copy(opt.iterate.σ)))
     end
     return opt.history
 end

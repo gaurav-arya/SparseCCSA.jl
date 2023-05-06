@@ -113,14 +113,6 @@ What are the invariants / contracts?
 function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
     @unpack f_and_jac, iterate, max_inner_iters, dual_optimizer = optimizer
 
-    is_primal = optimizer.dual_optimizer !== nothing
-    str = is_primal ? "primal" : "dual"
-    # is_primal &&
-    #     @info "Starting $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.jac_fx)
-
-    # Check feasibility
-    # any((@view iterate.fx[2:end]) .> 0) && return Solution(iterate.x, :INFEASIBLE)
-
     # Solve the dual problem, searching for a conservative solution. 
     inner_history = verbosity > 0 ? DataFrame() : nothing
     for i in 1:max_inner_iters
@@ -134,32 +126,6 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
         # Compute f at proposed point. 
         iterate.x_proposed .= iterate.x .+ iterate.Δx_proposed
         f_and_jac(iterate.fx_proposed, nothing, iterate.x_proposed)
-
-        if verbosity > 0
-		    # @printf "CCSA dual converged in %d iters to g=%g:\n" sol.iters -sol.fx[1]
-            sol = solve!(dual_optimizer; verbosity=verbosity-1)
-            neg_gλ = [0.0]
-            neg_grad_gλ = [0.0]
-
-            if optimizer.iter == 1 && i == 3
-                iterate |> dump
-                dual_optimizer.f_and_jac(neg_gλ, neg_grad_gλ, sol.x; debug = true)
-                @show neg_gλ neg_grad_gλ sol.x
-                # f_and_jac(iterate.fx_proposed, nothing, iterate.x_proposed)
-            end
-
-            # @show -neg_gλ -neg_grad_gλ
-            # error("done")
-		    # for i in 1:length(sol.x)
-            #     @printf "    CCSA x[%u]=%g\n" i sol.x[i]
-            # end
-
-		    # @printf "CCSA inner iteration\n"
-            # for i in 1:length(iterate.ρ)
-            #     @printf "                CCSA rho[%u] -> %g\n" i iterate.ρ[i];
-            #     @printf "                CCSA conservative[%u] -> %g\n" i iterate.gx_proposed[i] > iterate.fx_proposed[i];
-            # end
-        end
 
         # Increase ρ for non-conservative convex approximations.
         conservative = true 
@@ -225,19 +191,10 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
 
     if verbosity > 0
         push!(optimizer.history, (;ρ=copy(iterate.ρ), σ=copy(iterate.σ), x=copy(iterate.x), fx=copy(iterate.fx), inner_history))
-        # @printf "CCSA outer iteration\n"
-        # for i in 1:length(iterate.ρ)
-        #     @printf "                CCSA rho[%u] -> %g\n" i iterate.ρ[i];
-        # end
-        # for i in 1:length(iterate.σ)
-        #     @printf "                CCSA sigma[%u] -> %g\n" i iterate.σ[i];
-        # end
     end
 
     optimizer.iter += 1 
 
-    # is_primal &&
-    #     @info "Completed 1 $str outer iteration" repr(iterate.x) repr(iterate.ρ) repr(iterate.σ) repr(iterate.fx) repr(iterate.jac_fx) repr(iterate.Δx_last) repr(iterate.Δx)
     #=
         if norm(optimizer.Δx, Inf) < optimizer.xtol_abs
             optimizer.RET = :XTOL_ABS
