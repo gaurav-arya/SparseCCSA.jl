@@ -17,7 +17,7 @@ end
 function run_once_nlopt(evals)
     nlopt = Opt(:LD_CCSAQ, 2)
     nlopt.lower_bounds = [-1.0, -1.0]
-    nlopt.upper_bounds = [1.0, 1.0]
+    nlopt.upper_bounds = [2.0, 2.0]
     nlopt.maxeval = evals 
     nlopt.xtol_rel = 0.0
     nlopt.xtol_abs = 0.0

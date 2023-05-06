@@ -1,5 +1,5 @@
 function sparseccsa_df(iters=1)
-    opt = init(f_and_jac, fill(-1.0, 2), fill(1.0, 2), n, m;
+    opt = init(f_and_jac, fill(-1.0, 2), fill(2.0, 2), n, m;
                x0 = [0.5, 0.5], max_iters = 5,
                max_inner_iters = 150,
                max_dual_iters = 150, max_dual_inner_iters = 150,

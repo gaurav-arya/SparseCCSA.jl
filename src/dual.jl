@@ -20,9 +20,12 @@ iterate, which is sufficient to specify the dual problem.
 end
 
 function init_iterate(; n, m, x0::Vector{T}, jac_prototype, lb, ub) where {T}
+    σ = map(lb, ub) do lb, ub
+        (isinf(lb) || isinf(ub)) ? 1.0 : (ub - lb) / 2.0
+    end
     return Iterate(; x = x0, fx = zeros(T, m + 1), jac_fx = copy(jac_prototype),
                    ρ = ones(T, m + 1),
-                   σ = ones(T, n), lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n),
+                   σ, lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n),
                    gx_proposed = zeros(T, m + 1), x_proposed = zeros(T, n),
                    Δx_proposed = zeros(T, n), fx_proposed = zeros(T, m + 1))
 end

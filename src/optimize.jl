@@ -196,7 +196,8 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
     # only do this after the first iteration for consistency with nlopt
     if (optimizer.iter > 1)
         for i in eachindex(iterate.σ)
-            scaled = (sign(iterate.Δx[i]) == sign(iterate.Δx_last[i]) ? 1.2 : 0.7) * iterate.σ[i]
+            Δx2 = iterate.Δx[i] * iterate.Δx_last[i]
+            scaled = (Δx2 < 0 ? 0.7 : (Δx2 > 0 ? 1.2 : 1)) * iterate.σ[i]
             iterate.σ[i] = if isinf(iterate.ub[i]) || isinf(iterate.lb[i])
                 scaled
             else
