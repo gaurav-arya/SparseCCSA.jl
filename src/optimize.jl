@@ -20,11 +20,12 @@ end
 function reinit!(optimizer::CCSAOptimizer{T}) where {T}
     iterate = optimizer.iterate
 
+    # TODO: this logic should be in the same place as the logic for initializing the iterate, whereever that may be
     iterate.ρ .= one(T) # reinitialize penality weights
     iterate.σ .= one(T) # reinitialize radii of trust region
     iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
-    iterate.Δx .= zero(T)
-    iterate.Δx_last .= zero(T)
+    iterate.x_prev .= zero(T)
+    iterate.x_prevprev .= zero(T)
     optimizer.f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
 end
 
@@ -181,15 +182,14 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
             ))
         end
 
+        # We are guaranteed to have a better optimum once we find a conservative approximation.
+        # but even if not conservative, we can check if we have a better optimum by luck, and
+        # therefore update our current point a bit more aggressively within the inner iterations,
+        # so long as we are still feasible. (Done mostly for consistency with nlopt.) 
         feasible = all(<=(0), iterate.fx_proposed[2:end])
         better_opt = iterate.fx_proposed[1] < iterate.fx[1]
-        # we are guaranteed to have a better optimum once we find a conservative approximation.
-        # but we can update our current point a bit more aggressively within the inner iterations,
-        # so long as we are still feasible. (done mostly for consistency with nlopt) 
         if feasible && better_opt
             # Update iterate
-            iterate.Δx_last .= iterate.Δx
-            iterate.Δx .= iterate.Δx_proposed
             iterate.x .= iterate.x_proposed
             f_and_jac(iterate.fx, iterate.jac_fx, iterate.x) # TODO: can avoid this call if we store jac_fx_proposed in prev call
         end
@@ -202,10 +202,10 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
     end
 
     # Update σ based on monotonicity of changes
-    # only do this after the first iteration for consistency with nlopt
+    # only do this after the first iteration, similar to nlopt, since this should be a nullop after first update
     if (optimizer.iter > 1)
         for i in eachindex(iterate.σ)
-            Δx2 = iterate.Δx[i] * iterate.Δx_last[i]
+            Δx2 = (iterate.x[i] - iterate.x_prev[i]) * (iterate.x_prev[i] - iterate.x_prevprev[i])
             scaled = (Δx2 < 0 ? 0.7 : (Δx2 > 0 ? 1.2 : 1)) * iterate.σ[i]
             iterate.σ[i] = if isinf(iterate.ub[i]) || isinf(iterate.lb[i])
                 scaled
@@ -215,6 +215,10 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=1) where {T}
             end
         end
     end
+
+    # Push new x into storage of previous x's
+    iterate.x_prevprev .= iterate.x_prev
+    iterate.x_prev .= iterate.x
 
     # Reduce ρ (be less conservative)
     @. iterate.ρ = max(iterate.ρ / 10, 1e-5)

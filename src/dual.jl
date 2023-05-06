@@ -11,12 +11,13 @@ iterate, which is sufficient to specify the dual problem.
     lb::Vector{T} # n x 1 lower bounds on solution
     ub::Vector{T} # n x 1 upper bounds on solution
     # Below are buffers used by inner iteration logic. TODO: move into separate struct, defined in optimize.jl?
-    Δx::Vector{T} # n x 1 xᵏ⁺¹ - xᵏ
-    Δx_last::Vector{T} # n x 1 xᵏ - xᵏ⁻¹
-    gx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints
-    x_proposed::Vector{T}
     Δx_proposed::Vector{T}
+    x_proposed::Vector{T}
+    gx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints
     fx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints
+    # Buffers used in outer iteration logic. TODO: another separate struct?
+    x_prev::Vector{T} # n x 1 xᵏ⁻¹ 
+    x_prevprev::Vector{T} # n x 1 xᵏ⁻²
 end
 
 function init_iterate(; n, m, x0::Vector{T}, jac_prototype, lb, ub) where {T}
@@ -25,9 +26,10 @@ function init_iterate(; n, m, x0::Vector{T}, jac_prototype, lb, ub) where {T}
     end
     return Iterate(; x = x0, fx = zeros(T, m + 1), jac_fx = copy(jac_prototype),
                    ρ = ones(T, m + 1),
-                   σ, lb, ub, Δx = zeros(T, n), Δx_last = zeros(T, n),
-                   gx_proposed = zeros(T, m + 1), x_proposed = zeros(T, n),
-                   Δx_proposed = zeros(T, n), fx_proposed = zeros(T, m + 1))
+                   σ, lb, ub, 
+                   Δx_proposed = zeros(T, n), x_proposed = zeros(T, n),
+                   gx_proposed = zeros(T, m + 1), fx_proposed = zeros(T, m + 1),
+                   x_prev = copy(x0), x_prevprev = copy(x0))
 end
 
 """
