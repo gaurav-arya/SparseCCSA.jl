@@ -140,7 +140,6 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
         if verbosity > 0
             push!(inner_history, (;dual_iters=dual_sol.iters, dual_obj=-dual_sol.fx[1], 
                                    dual_opt=dual_sol.x[1], 
-                                   dual_grad=-neg_grad_gλ[1],
                                    ρ=copy(iterate.ρ), 
                                    x_proposed=copy(iterate.x_proposed),
                                    Δx_proposed=copy(iterate.Δx_proposed),
