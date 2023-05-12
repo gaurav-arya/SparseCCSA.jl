@@ -1,3 +1,4 @@
+# __revise_mode__ = :eval
 include("define_rosenbrock.jl")
 include("solve_sparseccsa.jl")
 
