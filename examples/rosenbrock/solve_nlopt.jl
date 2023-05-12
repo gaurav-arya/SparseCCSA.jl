@@ -121,7 +121,7 @@ function nlopt_df(evals)
         else
             σ = [NaN]
         end
-        push!(d, (;ρ, σ, inner_history))
+        push!(d, (;ρ, σ, inner_history, x=inner_history.x_proposed[end]))
     end
     if countlines(copy(buffer)) != 0
         @show countlines(copy(buffer))
