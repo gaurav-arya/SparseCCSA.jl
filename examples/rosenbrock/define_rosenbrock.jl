@@ -4,10 +4,10 @@ using ForwardDiff
 using SparseCCSA
 
 function f(x)
-    # obj = x[1]^4#
-    obj = 100 * (x[2] - x[1]^2)^2 + (1 - x[1])^2
-    # cons = x[1]^2 - 1
-    cons = x[1]^2 + x[2]^2 - 1
+    obj = x[1]^4#
+    # obj = 100 * (x[2] - x[1]^2)^2 + (1 - x[1])^2
+    cons = x[1]^2 - 1
+    # cons = x[1]^2 + x[2]^2 - 1
     return [obj, cons]
 end
 
