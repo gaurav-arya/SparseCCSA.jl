@@ -1,6 +1,6 @@
 include("../src/RosenbrockExample.jl")
 using .RosenbrockExample
-using CSV
+using JLD2
 
 df_n = nlopt_dataframe(1000)
-CSV.write("examples/rosenbrock/df_n.csv", df_n)
+save("examples/rosenbrock/nlopt_dataframe.jld2", Dict("df_n" => df_n))

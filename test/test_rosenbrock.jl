@@ -1,9 +1,11 @@
 include("../examples/rosenbrock/src/RosenbrockExample.jl")
 using .RosenbrockExample
 using Test
+using JLD2
+using DataFrames
 
 df_sp = sparseccsa_dataframe(400)
-df_n = nlopt_dataframe(334)
+df_n = load("examples/rosenbrock/nlopt_dataframe.jld2", "df_n") 
 
 # Check that first 20 iterations match
 @testset "Consistency with nlopt" begin
