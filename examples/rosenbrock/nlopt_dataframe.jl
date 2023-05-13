@@ -1,5 +1,3 @@
-using NLopt
-
 function obj(x, grad)
     if length(grad) > 0
         grad .= ForwardDiff.gradient(x -> f(x)[1], x)

@@ -1,8 +1,5 @@
 # https://www.mathworks.com/help/optim/ug/example-nonlinear-constrained-minimization.html?w.mathworks.com
 
-using ForwardDiff
-using SparseCCSA
-
 function f(x)
     # obj = x[1]^4#
     obj = 100 * (x[2] - x[1]^2)^2 + (1 - x[1])^2
