@@ -33,7 +33,7 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
     if optimizer.dual_optimizer !== nothing
         dual_optimizer = optimizer.dual_optimizer
         reinit!(dual_optimizer)
-        sol = solve!(dual_optimizer; verbosity=verbosity-1)
+        dual_sol = solve!(dual_optimizer; verbosity=verbosity-1)
 
         # We can form the dual evaluator with DualEvaluator(; iterate = optimizer.iterate, buffers=optimizer.buffers),
         # but since we have already formed it for the dual optimizer we just retrieve it here.  
@@ -42,12 +42,11 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
         # Perhaps this isn't actually necessary? i.e. maybe dual_evaluator.buffers.Δx always (?) already has the right thing
         dual_iterate = dual_optimizer.iterate
         dual_evaluator(dual_iterate.fx, dual_iterate.jac_fx, dual_iterate.x)
-        # @show dual_iterate.x sol.x
 
         Δx .= dual_evaluator.buffers.Δx
 
         # return dual soln object (used for logging)
-        return sol 
+        return dual_sol 
     else
         # the "dual dual" problem has 0 variables and 0 contraints, but running it allows us to retrieve the proposed Δx [length m].
         dual_dual_evaluator = DualEvaluator(; iterate = optimizer.iterate,
