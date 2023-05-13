@@ -1,5 +1,6 @@
 include("RosenbrockExample.jl")
 using .RosenbrockExample
+using LinearAlgebra
 
 begin
 df_sp = sparseccsa_dataframe(400)
@@ -36,9 +37,9 @@ axislegend(ax; position=:rb)
 ax = Axis(fig[1, 3]; xlabel="Iterations", ylabel="log(error)", yscale=log10)
 finalx = df_n_long.x[end] .+ 1e-8 # fudge factor for log
 lines!(ax, abs.(last.(df_sp.x .- Ref(finalx))); label="SparseCCSA x[2]", linestyle=:dash)
-lines!(ax, abs.(last.(df_sp2.x .- Ref(finalx))); label="nlopt x[2]", linestyle=:dot)
+lines!(ax, abs.(last.(df_n.x .- Ref(finalx))); label="nlopt x[2]", linestyle=:dot)
 lines!(ax, abs.(first.(df_sp.x .- Ref(finalx))); label="SparseCCSA x[1]", linestyle=:dash)
-lines!(ax, abs.(first.(df_sp2.x .- Ref(finalx))); label="nlopt x[1]", linestyle=:dot)
+lines!(ax, abs.(first.(df_n.x .- Ref(finalx))); label="nlopt x[1]", linestyle=:dot)
 axislegend(ax; position=:rt)
 fig
 
