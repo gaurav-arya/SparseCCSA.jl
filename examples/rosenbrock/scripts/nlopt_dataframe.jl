@@ -1,3 +1,5 @@
+# This is a separate standalone script because it must be run with a custom binary (see docstring below)
+
 function obj(x, grad)
     if length(grad) > 0
         grad .= ForwardDiff.gradient(x -> f(x)[1], x)

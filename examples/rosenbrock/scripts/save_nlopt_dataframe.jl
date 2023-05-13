@@ -1,5 +1,4 @@
-include("../src/RosenbrockExample.jl")
-using .RosenbrockExample
+include("nlopt_dataframe.jl")
 using JLD2
 
 df_n = nlopt_dataframe(1000)
