@@ -1,7 +1,7 @@
 # __revise_mode__ = :eval
 include("define_rosenbrock.jl")
-include("solve_nlopt.jl")
-include("solve_sparseccsa.jl")
+include("nlopt_df.jl")
+include("sparseccsa_df.jl")
 using LinearAlgebra
 
 #run_once_nlopt(8)

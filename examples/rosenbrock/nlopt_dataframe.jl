@@ -55,7 +55,7 @@ end
 buffer = IOBuffer(read(open("nlopt_out.txt"), String)) # easier to copy
 readline(buffer)
 
-function nlopt_df(evals) 
+function nlopt_dataframe(evals) 
     open("nlopt_out.txt", "w") do io
         redirect_stdout(io) do
             run_once_nlopt(evals)
