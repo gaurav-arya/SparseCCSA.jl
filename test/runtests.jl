@@ -4,4 +4,4 @@ using LinearAlgebra
 using SparseArrays
 using ForwardDiff
 
-include("toy_problem.jl")
+include("dual_toy_problem.jl")
