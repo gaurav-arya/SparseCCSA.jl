@@ -1,7 +1,7 @@
 include("SparseCCSAData.jl")
 include("NLoptData.jl")
-using .RosenbrockExample
-using .RosenbrockExample
+using .SparseCCSAData
+using .NLoptData
 using LinearAlgebra
 
 begin
