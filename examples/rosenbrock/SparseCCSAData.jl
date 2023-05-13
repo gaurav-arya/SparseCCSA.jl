@@ -1,4 +1,10 @@
-function sparseccsa_df(iters=1)
+module SparseCCSAData
+
+include("DefineRosenbrock.jl")
+using .DefineRosenbrock
+using SparseCCSA
+
+function sparseccsa_dataframe(iters=1)
     opt = init(f_and_jac, fill(-1.0, 2), fill(2.0, 2), n, m;
                x0 = [0.5, 0.5], max_iters = 5,
                max_inner_iters = 150,
@@ -10,4 +16,8 @@ function sparseccsa_df(iters=1)
         step!(opt; verbosity=1)
     end
     return opt.history
+end
+
+export sparseccsa_dataframe
+
 end

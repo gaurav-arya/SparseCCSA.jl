@@ -1,7 +1,7 @@
 # https://www.mathworks.com/help/optim/ug/example-nonlinear-constrained-minimization.html?w.mathworks.com
+module DefineRosenbrock
 
 using ForwardDiff
-using SparseCCSA
 
 function f(x)
     # obj = x[1]^4#
@@ -22,6 +22,11 @@ end
 n = 2
 m = 1
 
-fx = zeros(m + 1)
-jac = zeros(m + 1, n)
-f_and_jac(fx, jac, zeros(n))
+# example usage
+# fx = zeros(m + 1)
+# jac = zeros(m + 1, n)
+# f_and_jac(fx, jac, zeros(n))
+
+export f, f_and_jac, n, m
+
+end
