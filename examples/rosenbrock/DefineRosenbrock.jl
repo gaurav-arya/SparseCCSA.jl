@@ -27,6 +27,6 @@ m = 1
 # jac = zeros(m + 1, n)
 # f_and_jac(fx, jac, zeros(n))
 
-export f_and_jac, n, m
+export f, f_and_jac, n, m
 
 end

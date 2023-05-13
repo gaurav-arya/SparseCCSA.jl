@@ -2,6 +2,8 @@ module NLoptData
 
 include("DefineRosenbrock.jl")
 using .DefineRosenbrock
+using NLopt
+using ForwardDiff
 
 function obj(x, grad)
     if length(grad) > 0
@@ -54,9 +56,6 @@ function safe_scanf(buffer, fmt, args...)
     end
     return out
 end
-
-buffer = IOBuffer(read(open("nlopt_out.txt"), String)) # easier to copy
-readline(buffer)
 
 """
     Create DataFrame with NLopt optimization history.

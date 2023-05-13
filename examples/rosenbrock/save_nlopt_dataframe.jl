@@ -1,4 +1,5 @@
-include("nlopt_dataframe.jl")
+include("NLoptData.jl")
+using .NLoptData
 using JLD2
 
 df_n = nlopt_dataframe(1000)
