@@ -1,6 +1,5 @@
 module RosenbrockExample
 
-using LinearAlgebra
 using ForwardDiff
 using SparseCCSA
 using NLopt

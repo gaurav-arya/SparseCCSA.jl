@@ -53,6 +53,11 @@ end
 buffer = IOBuffer(read(open("nlopt_out.txt"), String)) # easier to copy
 readline(buffer)
 
+"""
+    Create DataFrame with NLopt optimization history.
+    Requires use of custom nlopt binary: build from https://github.com/gaurav-arya/nlopt/tree/ag-debug,
+    move shared object file to this directory, and set with set_binary.jl.
+"""
 function nlopt_dataframe(evals) 
     open("nlopt_out.txt", "w") do io
         redirect_stdout(io) do
