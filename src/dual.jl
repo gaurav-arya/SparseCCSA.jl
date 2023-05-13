@@ -72,7 +72,7 @@ Set the negated dual gradient neg_grad_gλ [shape 1 x m] and negated dual object
 in-place to their new values at λ [length = m].
 The evaluator's internal buffer Δx is also set so that xᵏ + Δx is the optimal primal.
 """
-function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ; debug=false) where {T}
+function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ) where {T}
     @unpack σ, ρ, x, fx, jac_fx, lb, ub = evaluator.iterate # these should be read-only
     @unpack a, b, Δx, λ_all, grad_gλ_all = evaluator.buffers
     # The dual evaluation turns out to be simpler to express with λ_{1...m} left-augmented by λ_0 = 1.
@@ -80,23 +80,11 @@ function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ; debug=false) w
     λ_all[1] = 1
     λ_all[2:end] .= λ
 
-    debug && (@show λ_all)
-    debug && (@show ρ)
-    debug && (@show σ)
-
-    a .= dot(λ_all, ρ) ./ (2 .* σ .^ 2) # nlopt u = a * 2σ^2
-    mul!(b, jac_fx', λ_all) # nlopt v = b
-    @. Δx = -b / (2 * a) # nlopt writes -σ^2 * v / u = -σ^2 * b / (a * 2σ^2) = -b / (2 * a)
-    # @show Δx
+    a .= dot(λ_all, ρ) ./ (2 .* σ .^ 2)
+    mul!(b, jac_fx', λ_all)
+    @. Δx = -b / (2 * a)
     @. Δx = clamp(Δx, -σ, σ)
-    # @show lb ub
-    # @show Δx
-    # @show x
     @. Δx = clamp(Δx, lb - x, ub - x)
-
-    debug && (@show Δx)
-    debug && (@show a)
-    debug && (@show b)
 
     if (neg_grad_gλ !== nothing) && (length(neg_grad_gλ) > 0)
         # Below we populate grad_gλ_all, i.e. the gradient WRT λ_0, ..., λ_m,
