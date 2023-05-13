@@ -1,4 +1,5 @@
 include("../src/RosenbrockExample.jl")
+include("nlopt_dataframe.jl")
 using .RosenbrockExample
 using LinearAlgebra
 
