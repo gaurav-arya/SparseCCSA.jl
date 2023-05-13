@@ -1,4 +1,4 @@
-include("RosenbrockExample.jl")
+include("../src/RosenbrockExample.jl")
 using .RosenbrockExample
 using LinearAlgebra
 
