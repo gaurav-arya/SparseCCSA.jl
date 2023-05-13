@@ -1,4 +1,7 @@
-# This is a separate standalone script because it must be run with a custom binary (see docstring below)
+module NLoptData
+
+include("DefineRosenbrock.jl")
+using .DefineRosenbrock
 
 function obj(x, grad)
     if length(grad) > 0
@@ -133,4 +136,8 @@ function nlopt_dataframe(evals)
         write("debug.txt", read(copy(buffer), String))
     end
     return d
+end
+
+export nlopt_dataframe
+
 end

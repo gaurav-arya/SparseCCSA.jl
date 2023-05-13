@@ -1,5 +1,6 @@
-include("../src/RosenbrockExample.jl")
-include("nlopt_dataframe.jl")
+include("SparseCCSAData.jl")
+include("NLoptData.jl")
+using .RosenbrockExample
 using .RosenbrockExample
 using LinearAlgebra
 
