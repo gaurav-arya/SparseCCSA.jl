@@ -37,8 +37,7 @@ function reinit!(optimizer::CCSAOptimizer{T}; x0=nothing, lb=nothing, ub=nothing
     optimizer.f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
     # recursively reinitalize dual optimizer
     if dual_optimizer !== nothing
-        dual_optimizer.iterate.x .= zero(T)
-        reinit!(dual_optimizer)
+        reinit!(dual_optimizer; x0=zero(T), lb=zero(T), ub=typemax(T))
     end
 end
 
