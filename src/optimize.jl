@@ -20,24 +20,24 @@ end
 function reinit!(optimizer::CCSAOptimizer{T}; x0=nothing, lb=nothing, ub=nothing) where {T}
     @unpack iterate, dual_optimizer = optimizer
 
-    # hmm, maybe there should be a separate init method afteer all. because we need to get lb/ub/etc. defaults correct here.
-
     # initialize lb and ub
-    (lb === nothing) ? (iterate.lb .= typemin(T)) : (iterate.lb .= lb)
-    (ub === nothing) ? (iterate.ub .= typemin(T)) : (iterate.ub .= ub)
+    
+    (lb !== nothing) && (iterate.lb .= lb) 
+    (ub !== nothing) && (iterate.ub .= ub) 
     # reinitialize ρ and σ
     iterate.ρ .= one(T) # reinitialize penality weights
     map!(iterate.σ, iterate.lb, iterate.ub) do lb, ub
         (isinf(lb) || isinf(ub)) ? 1.0 : (ub - lb) / 2.0
     end
-    # reinitialize starting point
-    (x0 === nothing) ? (iterate.x .= zero(T)) : (iterate.x .= x0)
+    # reinitialize starting point (default: keep what we are already at)
+    (x0 !== nothing) && (iterate.x .= x0) 
     iterate.x_prev .= iterate.x 
     iterate.x_prevprev .= iterate.x 
     # reinitialize function evaluation and Jacobian
     optimizer.f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
     # recursively reinitalize dual optimizer
     if dual_optimizer !== nothing
+        dual_optimizer.iterate.x .= zero(T)
         reinit!(dual_optimizer)
     end
 end
@@ -82,15 +82,15 @@ Return a CCSAOptimizer that can be step!'d.
 Free to allocate here.
 """
 # TODO: defaults for kwargs below
-function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters,
-              max_dual_iters, max_dual_inner_iters, jac_prototype) where {T}
-    # x0 = (x0 === nothing) ? zeros(n) : copy(x0)
+function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=nothing, 
+              max_iters=nothing, max_inner_iters=nothing, max_dual_iters=nothing, 
+              max_dual_inner_iters=nothing)
 
     # Allocate primal iterate, with n variables and m constraints
     iterate = allocate_iterate(; n, m, T, jac_prototype)
     buffers = allocate_buffers(; n, m, T)
 
-    # Setup dual iterate, with m variables and 0 constraints
+    # Allocate dual iterate, with m variables and 0 constraints
     dual_evaluator = DualEvaluator(; iterate, buffers)
     dual_iterate = allocate_iterate_for_dual(; m, T)
     dual_buffers = allocate_buffers_for_dual(; m, T)
@@ -105,6 +105,9 @@ function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters
                               max_inner_iters)
 
     # Initialize optimizer
+    x0 = (x0 === nothing) ? zeros(T, n) : copy(x0)
+    lb = (lb === nothing) ? fill(typemin(T), n) : lb 
+    ub = (ub === nothing) ? fill(typemax(T), n) : ub 
     reinit!(optimizer; x0, lb, ub)
 
     return optimizer
