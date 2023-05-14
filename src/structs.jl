@@ -92,3 +92,11 @@ Steppable CCSAOptimizer structure.
     settings::CCSASettings
     stats::CCSAStats{H} = CCSAStats()
 end
+
+"""
+Solution structure, not yet fleshed out / used.
+"""
+@kwdef struct Solution{T}
+    x::Vector{T}
+    RET::Symbol
+end

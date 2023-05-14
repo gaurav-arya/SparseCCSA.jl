@@ -52,11 +52,6 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
     end
 end
 
-@kwdef struct Solution{T}
-    x::Vector{T}
-    RET::Symbol
-end
-
 """
 Return a CCSAOptimizer that can be step!'d. 
 Free to allocate here.
