@@ -6,22 +6,24 @@
     max_iters::Int # max number of iterations
 =#
 
-@kwdef mutable struct CCSAOptimizer{T, F, L, D, H}
+@kwdef struct CCSAOptimizer{T, F, L, D, H, SC, ST}
     f_and_jac::F # f(x) = (m+1, (m+1) x n linear operator)
     iterate::Iterate{T, L}
     buffers::DualBuffers{T}
     dual_optimizer::D
+    stopping_conditions::SC
+    stats::ST = (; outer_iters_done=0, inner_iters_done=0)
     max_iters::Int
     max_inner_iters::Int
-    iter::Int = 1
     history::H = DataFrame()
 end
 
 function reinit!(optimizer::CCSAOptimizer{T}; x0=nothing, lb=nothing, ub=nothing) where {T}
     @unpack iterate, dual_optimizer = optimizer
 
-    # reset iteration count
-    optimizer.iter = 1
+    # reset optimizer stats 
+    @set! optimizer.stats.outer_iters_done = 0
+    @set! optimizer.stats.inner_iters_done = 0
     # initialize lb and ub
     (lb !== nothing) && (iterate.lb .= lb) 
     (ub !== nothing) && (iterate.ub .= ub) 
@@ -99,10 +101,10 @@ function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=noth
     dual_optimizer = CCSAOptimizer(; f_and_jac = dual_evaluator, iterate = dual_iterate,
                                    buffers = dual_buffers,
                                    dual_optimizer = nothing,
-                                   max_iters = max_dual_iters,
-                                   max_inner_iters = max_dual_inner_iters)
-    optimizer = CCSAOptimizer(; f_and_jac, iterate, buffers, dual_optimizer, max_iters,
-                              max_inner_iters)
+                                   stopping_conditions = (;max_iters = max_dual_iters, 
+                                                           max_inner_iters = max_dual_inner_iters)) 
+    optimizer = CCSAOptimizer(; f_and_jac, iterate, buffers, dual_optimizer,
+                                stopping_conditions = (;max_iters, max_inner_iters))
 
     # Initialize optimizer
     x0 = (x0 === nothing) ? zeros(T, n) : copy(x0)
@@ -172,16 +174,17 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
             f_and_jac(iterate.fx, iterate.jac_fx, iterate.x) # TODO: can avoid this call if we store jac_fx_proposed in prev call
         end
 
+        @set! optimizer.stats.inner_iters_done += 1
+
         # Break out if conservative
-        if inner_done 
-            # (!conservative && is_primal) && @info "Could not find conservative approx for $str"
-            break
-        end
+        inner_done && break
     end
+
+    @set! optimizer.stats.outer_iters_done += 1
 
     # Update σ based on monotonicity of changes
     # only do this after the first iteration, similar to nlopt, since this should be a nullop after first update
-    if (optimizer.iter > 1)
+    if optimizer.stats.outer_iters_done > 0
         for i in eachindex(iterate.σ)
             Δx2 = (iterate.x[i] - iterate.x_prev[i]) * (iterate.x_prev[i] - iterate.x_prevprev[i])
             scaled = (Δx2 < 0 ? 0.7 : (Δx2 > 0 ? 1.2 : 1)) * iterate.σ[i]
@@ -204,8 +207,6 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
     if verbosity > 0
         push!(optimizer.history, (;ρ=copy(iterate.ρ), σ=copy(iterate.σ), x=copy(iterate.x), fx=copy(iterate.fx), inner_history))
     end
-
-    optimizer.iter += 1 
 
     #=
         if norm(optimizer.Δx, Inf) < optimizer.xtol_abs
