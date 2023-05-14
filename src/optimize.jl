@@ -1,41 +1,58 @@
-#=
-    xtol_rel::T # relative tolerence
-    xtol_abs::T # absolute tolerence
-    ftol_rel::T # relative tolerence
-    ftol_abs::T # absolute tolerence
-    max_iters::Int # max number of iterations
-=#
+@kwdef mutable struct CCSASettings{T1, T2, T3, T4, T5, T6}
+    xtol_rel::T1 = nothing # relative tolerence of solution
+    xtol_abs::T2 = nothing # absolute tolerence of solution
+    ftol_rel::T3 = nothing # relative tolerence of objective 
+    ftol_abs::T4 = nothing # absolute tolerence of objective
+    max_iters::T5 = nothing # max number of iterations
+    max_inner_iters::T6 = nothing # max number of inner iterations
+end
+# TODO: ensure at least one stopping condition
+# function has_stopping_condition(settings::CCSASettings) 
+#     return (settings.xtol_rel > zero(T)) || (settings.xtol_abs > zero(T)) ||
+#            (settings.ftol_rel > zero(T)) || (settings.ftol_abs > zero(T)) ||
+#            (settings.max_iters < typemax(T))
+# end
 
-@kwdef mutable struct CCSAOptimizer{T, F, L, D, H}
+@kwdef mutable struct CCSAStats
+    outer_iters_done::Int = 0
+    inner_iters_done::Int = 0
+    inner_iters_cur_done::Int = 0
+end
+function reset!(stats::CCSAStats)
+    stats.outer_iters_done = 0
+    stats.inner_iters_done = 0
+end
+
+@kwdef struct CCSAOptimizer{T, F, L, D, H}
     f_and_jac::F # f(x) = (m+1, (m+1) x n linear operator)
     iterate::Iterate{T, L}
     buffers::DualBuffers{T}
     dual_optimizer::D
-    max_iters::Int
-    max_inner_iters::Int
-    iter::Int = 1
+    settings::CCSASettings
+    stats::CCSAStats = CCSAStats()
     history::H = DataFrame()
 end
 
 function reinit!(optimizer::CCSAOptimizer{T}; x0=nothing, lb=nothing, ub=nothing) where {T}
     @unpack iterate, dual_optimizer = optimizer
 
-    # initialize lb and ub
-    
+    # Reset optimizer stats 
+    reset!(optimizer.stats)
+    # Initialize lb and ub
     (lb !== nothing) && (iterate.lb .= lb) 
     (ub !== nothing) && (iterate.ub .= ub) 
-    # reinitialize ρ and σ
-    iterate.ρ .= one(T) # reinitialize penality weights
+    # Reinitialize ρ and σ
+    iterate.ρ .= one(T)
     map!(iterate.σ, iterate.lb, iterate.ub) do lb, ub
         (isinf(lb) || isinf(ub)) ? 1.0 : (ub - lb) / 2.0
     end
-    # reinitialize starting point (default: keep what we are already at)
+    # Reinitialize starting point (default: keep what we are already at)
     (x0 !== nothing) && (iterate.x .= x0) 
     iterate.x_prev .= iterate.x 
     iterate.x_prevprev .= iterate.x 
-    # reinitialize function evaluation and Jacobian
+    # Reinitialize function evaluation and Jacobian
     optimizer.f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
-    # recursively reinitalize dual optimizer
+    # Recursively reinitalize dual optimizer
     if dual_optimizer !== nothing
         reinit!(dual_optimizer; x0=zero(T), lb=zero(T), ub=typemax(T))
     end
@@ -57,7 +74,7 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
 
         Δx .= dual_evaluator.buffers.Δx
 
-        # return dual soln object (used for logging)
+        # Return dual solution object (used for logging)
         return dual_sol 
     else
         # the "dual dual" problem has 0 variables and 0 contraints, but running it allows us to retrieve the proposed Δx [length m].
@@ -82,8 +99,9 @@ Free to allocate here.
 """
 # TODO: defaults for kwargs below
 function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=nothing, 
-              max_iters=nothing, max_inner_iters=nothing, max_dual_iters=nothing, 
-              max_dual_inner_iters=nothing)
+              max_iters=nothing, max_inner_iters=nothing, ftol_abs=nothing, ftol_rel=nothing,
+              max_dual_iters=nothing, max_dual_inner_iters=nothing, dual_ftol_abs=nothing,
+              dual_ftol_rel=nothing)
 
     # Allocate primal iterate, with n variables and m constraints
     iterate = allocate_iterate(; n, m, T, jac_prototype)
@@ -98,10 +116,11 @@ function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=noth
     dual_optimizer = CCSAOptimizer(; f_and_jac = dual_evaluator, iterate = dual_iterate,
                                    buffers = dual_buffers,
                                    dual_optimizer = nothing,
-                                   max_iters = max_dual_iters,
-                                   max_inner_iters = max_dual_inner_iters)
-    optimizer = CCSAOptimizer(; f_and_jac, iterate, buffers, dual_optimizer, max_iters,
-                              max_inner_iters)
+                                   settings = CCSASettings(; max_iters = max_dual_iters, 
+                                                           max_inner_iters = max_dual_inner_iters,
+                                                           ftol_abs = dual_ftol_abs, ftol_rel = dual_ftol_rel))
+    optimizer = CCSAOptimizer(; f_and_jac, iterate, buffers, dual_optimizer,
+                                settings = CCSASettings(; max_iters, max_inner_iters, ftol_abs, ftol_rel))
 
     # Initialize optimizer
     x0 = (x0 === nothing) ? zeros(T, n) : copy(x0)
@@ -122,11 +141,22 @@ What are the invariants / contracts?
 - optimizer.dual_optimizer contains a ref to optimizer.iterate, so updating latter implicitly updates the former. 
 """
 function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
-    @unpack f_and_jac, iterate, max_inner_iters, dual_optimizer = optimizer
+    @unpack f_and_jac, iterate, dual_optimizer, stats, settings = optimizer
+
+    retcode = get_retcode(optimizer)
+    (retcode != :CONTINUE) && return retcode
+
+    if optimizer.stats.outer_iters_done > 0
+        # Push new x into storage of previous x's
+        iterate.x_prevprev .= iterate.x_prev
+        iterate.x_prev .= iterate.x
+        # Push new fx[1] into storage of previous fx[1]
+        iterate.fx_prev .= iterate.fx
+    end
 
     # Solve the dual problem, searching for a conservative solution. 
-    inner_history = verbosity > 0 ? DataFrame() : nothing
-    for i in 1:max_inner_iters
+    inner_history = verbosity > 1 ? DataFrame() : nothing
+    while true 
         dual_sol = propose_Δx!(iterate.Δx_proposed, optimizer; verbosity)
 
         # Compute conservative approximation g at proposed point.
@@ -148,8 +178,8 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
             end
         end
 
-        if verbosity > 0
-            push!(inner_history, (;dual_iters=dual_sol.iters, dual_obj=-dual_sol.fx[1], 
+        if verbosity > 1
+            push!(inner_history, (;dual_iters=dual_sol.stats.outer_iters_done, dual_obj=-dual_sol.fx[1], 
                                    dual_opt=dual_sol.x[1], 
                                    ρ=copy(iterate.ρ), 
                                    x_proposed=copy(iterate.x_proposed),
@@ -164,22 +194,25 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
         # so long as we are still feasible. (Done mostly for consistency with nlopt.) 
         feasible = all(<=(0), iterate.fx_proposed[2:end])
         better_opt = iterate.fx_proposed[1] < iterate.fx[1]
-        if feasible && better_opt
+        inner_done = conservative || (stats.inner_iters_cur_done == settings.max_inner_iters) 
+        if feasible && (better_opt || inner_done)
             # Update iterate
             iterate.x .= iterate.x_proposed
             f_and_jac(iterate.fx, iterate.jac_fx, iterate.x) # TODO: can avoid this call if we store jac_fx_proposed in prev call
         end
 
+        stats.inner_iters_cur_done += 1
+        stats.inner_iters_done += 1
+
         # Break out if conservative
-        if conservative || (i == max_inner_iters) 
-            # (!conservative && is_primal) && @info "Could not find conservative approx for $str"
-            break
-        end
+        inner_done && break
     end
+
+    optimizer.stats.outer_iters_done += 1
 
     # Update σ based on monotonicity of changes
     # only do this after the first iteration, similar to nlopt, since this should be a nullop after first update
-    if (optimizer.iter > 1)
+    if optimizer.stats.outer_iters_done > 1
         for i in eachindex(iterate.σ)
             Δx2 = (iterate.x[i] - iterate.x_prev[i]) * (iterate.x_prev[i] - iterate.x_prevprev[i])
             scaled = (Δx2 < 0 ? 0.7 : (Δx2 > 0 ? 1.2 : 1)) * iterate.σ[i]
@@ -192,10 +225,6 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
         end
     end
 
-    # Push new x into storage of previous x's
-    iterate.x_prevprev .= iterate.x_prev
-    iterate.x_prev .= iterate.x
-
     # Reduce ρ (be less conservative)
     @. iterate.ρ = max(iterate.ρ / 10, 1e-5)
 
@@ -203,33 +232,34 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
         push!(optimizer.history, (;ρ=copy(iterate.ρ), σ=copy(iterate.σ), x=copy(iterate.x), fx=copy(iterate.fx), inner_history))
     end
 
-    optimizer.iter += 1 
+    return retcode
+end
 
-    #=
-        if norm(optimizer.Δx, Inf) < optimizer.xtol_abs
-            optimizer.RET = :XTOL_ABS
-            return
+function get_retcode(optimizer::CCSAOptimizer)
+    @unpack iterate, stats, settings = optimizer
+
+    if (settings.max_iters !== nothing) && (stats.outer_iters_done >= settings.max_iters)
+        return :MAX_ITERS
+    end
+
+    if (stats.outer_iters_done > 1)
+        # Objective tolerance 
+        Δfx = abs(iterate.fx[1] - iterate.fx_prev[1])  
+        if (settings.ftol_abs !== nothing) && (Δfx < settings.ftol_abs)
+            return :FTOL_ABS
+        elseif (settings.ftol_rel !== nothing) && (abs(Δfx / iterate.fx[1]) < settings.ftol_rel)
+            return :FTOL_REL
         end
-        if norm(optimizer.Δx, Inf) / norm(optimizer.x, Inf)  < optimizer.xtol_rel
-            optimizer.RET = :XTOL_REL
-            return
-        end
-        if norm(Δxf, Inf) < optimizer.ftol_abs
-            optimizer.RET = :FTOL_REL
-            return
-        end
-        if norm(Δxf, Inf) / norm(f, Inf) < optimizer.ftol_rel
-            optimizer.RET = :FTOL_REL
-            return
-        end
-    =#
+    end
+
+    return :CONTINUE
 end
 
 function solve!(optimizer::CCSAOptimizer; verbosity=0)
 
-    # TODO: catch stopping conditions in opt and exit here
-    for i in 1:(optimizer.max_iters)
-        step!(optimizer; verbosity)
+    retcode = :CONTINUE
+    while retcode == :CONTINUE
+        retcode = step!(optimizer; verbosity)
     end
-    return (; x=optimizer.iterate.x, fx=optimizer.iterate.fx, retcode=:MAX_ITERS, iters=optimizer.max_iters)
+    return (; x=optimizer.iterate.x, fx=optimizer.iterate.fx, retcode, stats=optimizer.stats)
 end

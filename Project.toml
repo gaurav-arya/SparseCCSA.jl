@@ -7,6 +7,7 @@ version = "0.1.0"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
@@ -16,10 +17,10 @@ julia = "1"
 [extras]
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [targets]
 test = ["SparseArrays", "ForwardDiff", "Test", "SafeTestsets", "JLD2", "Random"]
