@@ -126,7 +126,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
 
         # Compute f at proposed point. 
         cache.x_proposed .= cache.x .+ cache.Δx_proposed
-        f_and_jac(cache.fx_proposed, nothing, cache.x_proposed)
+        f_and_jac(cache.fx_proposed, cache.jac_fx_proposed, cache.x_proposed)
 
         # Increase ρ for non-conservative convex approximations.
         conservative = true 
@@ -158,7 +158,8 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
         if feasible && (better_opt || inner_done)
             # Update cache
             cache.x .= cache.x_proposed
-            f_and_jac(cache.fx, cache.jac_fx, cache.x) # TODO: can avoid this call if we store jac_fx_proposed in prev call
+            cache.fx .= cache.fx_proposed
+            cache.jac_fx .= cache.jac_fx_proposed
         end
 
         stats.inner_iters_cur_done += 1
