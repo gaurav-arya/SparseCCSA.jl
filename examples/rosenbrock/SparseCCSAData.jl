@@ -10,7 +10,6 @@ function sparseccsa_dataframe(iters=1)
                max_inner_iters = 150,
                max_dual_iters = 150, max_dual_inner_iters = 150,
                jac_prototype = zeros(m + 1, n))
-    dual_optimizer = opt.dual_optimizer
 
     for i in 1:iters
         step!(opt; verbosity=1)

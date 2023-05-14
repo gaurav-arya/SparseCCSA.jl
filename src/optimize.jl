@@ -17,16 +17,31 @@
     history::H = DataFrame()
 end
 
-function reinit!(optimizer::CCSAOptimizer{T}) where {T}
-    iterate = optimizer.iterate
+function reinit!(optimizer::CCSAOptimizer{T}; x0=nothing, lb=nothing, ub=nothing) where {T}
+    @unpack iterate, dual_optimizer = optimizer
 
-    # TODO: this logic should be in the same place as the logic for initializing the iterate, whereever that may be
+    # initialize lb and ub
+    lb !== nothing && (lb .= typemin(T))
+    ub !== nothing && (ub .= typemax(T))
+    # reinitialize ρ and σ
     iterate.ρ .= one(T) # reinitialize penality weights
-    iterate.σ .= one(T) # reinitialize radii of trust region
-    iterate.x .= zero(T) # reinitialize starting point of Lagrange multipliers
-    iterate.x_prev .= zero(T)
-    iterate.x_prevprev .= zero(T)
+    map!(iterate.σ, iterate.lb, iterate.ub) do lb, ub
+        (isinf(lb) || isinf(ub)) ? 1.0 : (ub - lb) / 2.0
+    end
+    # reinitialize starting point
+    if (x0 === nothing)
+        iterate.x .= zero(T)
+    else
+        iterate.x .= x0
+    end 
+    iterate.x_prev .= iterate.x 
+    iterate.x_prevprev .= iterate.x 
+    # reinitialize function evaluation and Jacobian
     optimizer.f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
+    # recursively reinitalize dual optimizer
+    if dual_optimizer !== nothing
+        reinit!(dual_optimizer)
+    end
 end
 
 function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
@@ -73,14 +88,14 @@ function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters
               max_dual_iters, max_dual_inner_iters, jac_prototype) where {T}
     # x0 = (x0 === nothing) ? zeros(n) : copy(x0)
 
-    # Setup primal iterate, with n variables and m constraints
-    iterate = init_iterate(; n, m, x0, jac_prototype, lb, ub)
-    buffers = init_buffers(; n, m, T)
+    # Allocate primal iterate, with n variables and m constraints
+    iterate = allocate_iterate(; n, m, T, jac_prototype)
+    buffers = allocate_buffers(; n, m, T)
 
     # Setup dual iterate, with m variables and 0 constraints
     dual_evaluator = DualEvaluator(; iterate, buffers)
-    dual_iterate = init_iterate_for_dual(; m, T)
-    dual_buffers = init_buffers_for_dual(; m, T)
+    dual_iterate = allocate_iterate_for_dual(; m, T)
+    dual_buffers = allocate_buffers_for_dual(; m, T)
 
     # Setup optimizers
     dual_optimizer = CCSAOptimizer(; f_and_jac = dual_evaluator, iterate = dual_iterate,
@@ -91,11 +106,8 @@ function init(f_and_jac, lb, ub, n, m; x0::Vector{T}, max_iters, max_inner_iters
     optimizer = CCSAOptimizer(; f_and_jac, iterate, buffers, dual_optimizer, max_iters,
                               max_inner_iters)
 
-    # Initialize objective and gradient
-    # TODO: could be acceptable to move this to beginning of step!
-    f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
-    # @show dual_iterate.fx dual_iterate.jac_fx dual_iterate.x
-    dual_evaluator(dual_iterate.fx, dual_iterate.jac_fx, dual_iterate.x)
+    # Initialize optimizer
+    reinit!(optimizer; x0, lb, ub)
 
     return optimizer
 end
