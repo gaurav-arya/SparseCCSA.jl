@@ -5,7 +5,7 @@ using .NLoptData
 using LinearAlgebra
 
 begin
-df_sp = sparseccsa_dataframe(400)
+df_sp = sparseccsa_dataframe(100)
 df_n = nlopt_dataframe(334)
 df_n_long = nlopt_dataframe(1000)
 end
