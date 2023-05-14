@@ -1,47 +1,25 @@
 """
 This structure contains information about the current primal
-iterate, which is sufficient to specify the dual problem.
+cache, which is sufficient to specify the dual problem.
 """
-@kwdef struct Iterate{T, L}
-    x::Vector{T} # (n x 1) x 1 iterate xᵏ
+@kwdef struct CCSACache{T, L}
+    x::Vector{T} # (n x 1) x 1 cache xᵏ
     fx::Vector{T} # (m+1) x 1 values of objective and constraints
     jac_fx::L # (m+1) x n Jacobian linear operator at x
     ρ::Vector{T} # (m+1) x 1 penality weight
     σ::Vector{T} # n x 1 axes lengths of trust region
     lb::Vector{T} # n x 1 lower bounds on solution
     ub::Vector{T} # n x 1 upper bounds on solution
-    # Below are buffers used by inner iteration logic. TODO: move into separate struct, defined in optimize.jl?
+    # Buffers used by inner iteration logic.
     Δx_proposed::Vector{T}
     x_proposed::Vector{T}
     gx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints
     fx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints
-    # Buffers used in outer iteration logic. TODO: another separate struct?
+    # Buffers used in outer iteration logic.
     x_prev::Vector{T} # n x 1 xᵏ⁻¹ 
     x_prevprev::Vector{T} # n x 1 xᵏ⁻²
     fx_prev::Vector{T} # (m+1) x 1 previous objective and constraints
-end
-
-function allocate_iterate(; n, m, T, jac_prototype)
-    return Iterate(; x = zeros(T, n), fx = zeros(T, m + 1), jac_fx = copy(jac_prototype),
-                   ρ = zeros(T, m + 1),
-                   σ = zeros(T, n), lb = zeros(T, n), ub = zeros(T, n),
-                   Δx_proposed = zeros(T, n), x_proposed = zeros(T, n),
-                   gx_proposed = zeros(T, m + 1), fx_proposed = zeros(T, m + 1),
-                   x_prev = zeros(T, n), x_prevprev = zeros(T, n), fx_prev = zeros(T, m+1))
-end
-
-"""
-Instantiates the iterate structure for a dual problem with m constraints.
-"""
-function allocate_iterate_for_dual(; m, T)
-    return allocate_iterate(; n = m, m = 0, T,
-                        jac_prototype = zeros(T, 1, m))
-end
-
-"""
-Mutable buffers used by the dual optimization algorithm.
-"""
-@kwdef struct DualBuffers{T}
+    # Buffers used in dual evaluation
     a::Vector{T} # n x 1 buffer
     b::Vector{T} # n x 1 buffer
     Δx::Vector{T} # n x 1 buffer
@@ -49,17 +27,30 @@ Mutable buffers used by the dual optimization algorithm.
     grad_gλ_all::Vector{T} # (m + 1) x 1 buffer
 end
 
-function allocate_buffers(; n, m, T)
-    DualBuffers(zeros(T, n), zeros(T, n), zeros(T, n), zeros(T, m + 1), zeros(T, m + 1))
+function allocate_cache(; n, m, T, jac_prototype)
+    return CCSACache(; x = zeros(T, n), fx = zeros(T, m + 1), jac_fx = copy(jac_prototype),
+                   ρ = zeros(T, m + 1),
+                   σ = zeros(T, n), lb = zeros(T, n), ub = zeros(T, n),
+                   Δx_proposed = zeros(T, n), x_proposed = zeros(T, n),
+                   gx_proposed = zeros(T, m + 1), fx_proposed = zeros(T, m + 1),
+                   x_prev = zeros(T, n), x_prevprev = zeros(T, n), fx_prev = zeros(T, m + 1),
+                   a = zeros(T, n), b = zeros(T, n), Δx = zeros(T, n), 
+                   λ_all = zeros(T, m + 1), grad_gλ_all = zeros(T, m + 1))
 end
-allocate_buffers_for_dual(; m, T) = allocate_buffers(; n = m, m = 0, T)
+
+"""
+Instantiates the cache structure for a dual problem with m constraints.
+"""
+function allocate_cache_for_dual(; m, T)
+    return allocate_cache(; n = m, m = 0, T,
+                        jac_prototype = zeros(T, 1, m))
+end
 
 """
 A callable structure for evaluating the dual function and its gradient.
 """
 @kwdef struct DualEvaluator{T, L}
-    iterate::Iterate{T, L}
-    buffers::DualBuffers{T}
+    cache::CCSACache{T, L}
 end
 
 """
@@ -70,8 +61,8 @@ in-place to their new values at λ [length = m].
 The evaluator's internal buffer Δx is also set so that xᵏ + Δx is the optimal primal.
 """
 function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ) where {T}
-    @unpack σ, ρ, x, fx, jac_fx, lb, ub = evaluator.iterate # these should be read-only
-    @unpack a, b, Δx, λ_all, grad_gλ_all = evaluator.buffers
+    @unpack σ, ρ, x, fx, jac_fx, lb, ub = evaluator.cache # extract "read-only" info specifying dual problem
+    @unpack a, b, Δx, λ_all, grad_gλ_all = evaluator.cache # extract dual buffers
     # The dual evaluation turns out to be simpler to express with λ_{1...m} left-augmented by λ_0 = 1.
     # We have special (m+1)-length buffers for this, which is a little wasteful. 
     λ_all[1] = 1
