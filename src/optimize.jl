@@ -147,7 +147,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
         # but even if not conservative, we can check if we have a better optimum by luck, and
         # therefore update our current point a bit more aggressively within the inner iterations,
         # so long as we are still feasible. (Done mostly for consistency with nlopt.) 
-        feasible = all(<=(0), cache.fx_proposed[2:end])
+        feasible = all(<=(0), @view cache.fx_proposed[2:end])
         better_opt = cache.fx_proposed[1] < cache.fx[1]
         inner_done = conservative || (stats.inner_iters_cur_done == settings.max_inner_iters) 
         if feasible && (better_opt || inner_done)
