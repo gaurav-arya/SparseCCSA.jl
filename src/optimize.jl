@@ -21,19 +21,15 @@ function reinit!(optimizer::CCSAOptimizer{T}; x0=nothing, lb=nothing, ub=nothing
     @unpack iterate, dual_optimizer = optimizer
 
     # initialize lb and ub
-    lb !== nothing && (lb .= typemin(T))
-    ub !== nothing && (ub .= typemax(T))
+    (lb === nothing) ? (iterate.lb .= typemin(T)) : (iterate.lb .= lb)
+    (ub === nothing) ? (iterate.ub .= typemin(T)) : (iterate.ub .= ub)
     # reinitialize ρ and σ
     iterate.ρ .= one(T) # reinitialize penality weights
     map!(iterate.σ, iterate.lb, iterate.ub) do lb, ub
         (isinf(lb) || isinf(ub)) ? 1.0 : (ub - lb) / 2.0
     end
     # reinitialize starting point
-    if (x0 === nothing)
-        iterate.x .= zero(T)
-    else
-        iterate.x .= x0
-    end 
+    (x0 === nothing) ? (iterate.x .= zero(T)) : (iterate.x .= x0)
     iterate.x_prev .= iterate.x 
     iterate.x_prevprev .= iterate.x 
     # reinitialize function evaluation and Jacobian
