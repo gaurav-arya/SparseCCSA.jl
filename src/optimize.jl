@@ -1,10 +1,10 @@
-@kwdef mutable struct CCSASettings
-    xtol_rel::T = zero(T) # relative tolerence of solution
-    xtol_abs::T = zero(T) # absolute tolerence of solution
-    ftol_rel::T = zero(T) # relative tolerence of objective 
-    ftol_abs::T = zero(T) # absolute tolerence of objective
-    max_iters::Int = typemax(T) # max number of iterations
-    max_inner_iters::Int = typemax(T) # max number of inner iterations
+@kwdef mutable struct CCSASettings{T1, T2, T3, T4}
+    xtol_rel::T1 = nothing # relative tolerence of solution
+    xtol_abs::T2 = nothing # absolute tolerence of solution
+    ftol_rel::T3 = nothing # relative tolerence of objective 
+    ftol_abs::T4 = nothing # absolute tolerence of objective
+    max_iters::Int = nothing # max number of iterations
+    max_inner_iters::Int = nothing # max number of inner iterations
 end
 # TODO: ensure at least one stopping condition
 # function has_stopping_condition(settings::CCSASettings) 
@@ -16,6 +16,7 @@ end
 @kwdef mutable struct CCSAStats
     outer_iters_done::Int = 0
     inner_iters_done::Int = 0
+    inner_iters_cur_done::Int = 0
 end
 function reset!(stats::CCSAStats)
     stats.outer_iters_done = 0
@@ -178,7 +179,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
         end
 
         if verbosity > 0
-            push!(inner_history, (;dual_iters=dual_sol.iters, dual_obj=-dual_sol.fx[1], 
+            push!(inner_history, (;dual_iters=dual_sol.stats.outer_iters_done, dual_obj=-dual_sol.fx[1], 
                                    dual_opt=dual_sol.x[1], 
                                    ρ=copy(iterate.ρ), 
                                    x_proposed=copy(iterate.x_proposed),
@@ -193,14 +194,15 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
         # so long as we are still feasible. (Done mostly for consistency with nlopt.) 
         feasible = all(<=(0), iterate.fx_proposed[2:end])
         better_opt = iterate.fx_proposed[1] < iterate.fx[1]
-        inner_done = conservative || (i == settings.max_inner_iters) 
+        inner_done = conservative || (stats.inner_iters_cur_done == settings.max_inner_iters) 
         if feasible && (better_opt || inner_done)
             # Update iterate
             iterate.x .= iterate.x_proposed
             f_and_jac(iterate.fx, iterate.jac_fx, iterate.x) # TODO: can avoid this call if we store jac_fx_proposed in prev call
         end
 
-        optimizer.stats.inner_iters_done += 1
+        stats.inner_iters_cur_done += 1
+        stats.inner_iters_done += 1
 
         # Break out if conservative
         inner_done && break
@@ -234,7 +236,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
 end
 
 function get_retcode(optimizer::CCSAOptimizer)
-    @unpack stats, settings = optimizer
+    @unpack iterate, stats, settings = optimizer
 
     if (stats.outer_iters_done !== nothing) && (stats.outer_iters_done >= settings.max_iters)
         return :MAX_ITERS
@@ -243,9 +245,9 @@ function get_retcode(optimizer::CCSAOptimizer)
     if (stats.outer_iters_done > 1)
         # Objective tolerance 
         Δfx = abs(iterate.fx[1] - iterate.fx_prev[1])  
-        if (optimizer.ftol_abs !== nothing) && (Δfx < optimizer.ftol_abs)
+        if (settings.ftol_abs !== nothing) && (Δfx < settings.ftol_abs)
             return :FTOL_ABS
-        elseif (optimizer.ftol_rel !== nothing) && (Δfx / iterate.fx[1] < optimizer.ftol_rel)
+        elseif (settings.ftol_rel !== nothing) && (Δfx / iterate.fx[1] < settings.ftol_rel)
             return :FTOL_REL
         end
     end
@@ -255,9 +257,9 @@ end
 
 function solve!(optimizer::CCSAOptimizer; verbosity=0)
 
-    while true
+    retcode = :CONTINUE
+    while retcode != :CONTINUE
         retcode = step!(optimizer; verbosity)
-        (retcode != :CONTINUE) && break
     end
-    return (; x=optimizer.iterate.x, fx=optimizer.iterate.fx, retcode, iters=optimizer.max_iters)
+    return (; x=optimizer.iterate.x, fx=optimizer.iterate.fx, retcode, stats=optimizer.stats)
 end

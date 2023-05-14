@@ -18,7 +18,7 @@ iterate, which is sufficient to specify the dual problem.
     # Buffers used in outer iteration logic. TODO: another separate struct?
     x_prev::Vector{T} # n x 1 xᵏ⁻¹ 
     x_prevprev::Vector{T} # n x 1 xᵏ⁻²
-    fx_prev::T # (m+1) x 1 previous objective and constraints
+    fx_prev::Vector{T} # (m+1) x 1 previous objective and constraints
 end
 
 function allocate_iterate(; n, m, T, jac_prototype)
