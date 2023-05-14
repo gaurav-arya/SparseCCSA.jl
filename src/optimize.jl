@@ -1,37 +1,3 @@
-@kwdef mutable struct CCSASettings{T1, T2, T3, T4, T5, T6}
-    xtol_rel::T1 = nothing # relative tolerence of solution
-    xtol_abs::T2 = nothing # absolute tolerence of solution
-    ftol_rel::T3 = nothing # relative tolerence of objective 
-    ftol_abs::T4 = nothing # absolute tolerence of objective
-    max_iters::T5 = nothing # max number of iterations
-    max_inner_iters::T6 = nothing # max number of inner iterations
-end
-# TODO: ensure at least one stopping condition
-# function has_stopping_condition(settings::CCSASettings) 
-#     return (settings.xtol_rel > zero(T)) || (settings.xtol_abs > zero(T)) ||
-#            (settings.ftol_rel > zero(T)) || (settings.ftol_abs > zero(T)) ||
-#            (settings.max_iters < typemax(T))
-# end
-
-@kwdef mutable struct CCSAStats
-    outer_iters_done::Int = 0
-    inner_iters_done::Int = 0
-    inner_iters_cur_done::Int = 0
-end
-function reset!(stats::CCSAStats)
-    stats.outer_iters_done = 0
-    stats.inner_iters_done = 0
-end
-
-@kwdef struct CCSAOptimizer{T, F, L, D, H}
-    f_and_jac::F # f(x) = (m+1, (m+1) x n linear operator)
-    cache::CCSACache{T, L}
-    dual_optimizer::D
-    settings::CCSASettings
-    stats::CCSAStats = CCSAStats()
-    history::H = DataFrame()
-end
-
 function reinit!(optimizer::CCSAOptimizer{T}; x0=nothing, lb=nothing, ub=nothing) where {T}
     @unpack cache, dual_optimizer = optimizer
 
@@ -105,11 +71,10 @@ function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=noth
     cache = allocate_cache(; n, m, T, jac_prototype)
 
     # Allocate dual cache, with m variables and 0 constraints
-    dual_evaluator = DualEvaluator(; cache)
     dual_cache = allocate_cache_for_dual(; m, T)
 
     # Setup optimizers
-    dual_optimizer = CCSAOptimizer(; f_and_jac = dual_evaluator, cache = dual_cache,
+    dual_optimizer = CCSAOptimizer(; f_and_jac = DualEvaluator(; cache), cache = dual_cache,
                                    dual_optimizer = nothing,
                                    settings = CCSASettings(; max_iters = max_dual_iters, 
                                                            max_inner_iters = max_dual_inner_iters,
@@ -224,7 +189,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
     @. cache.ρ = max(cache.ρ / 10, 1e-5)
 
     if verbosity > 0
-        push!(optimizer.history, (;ρ=copy(cache.ρ), σ=copy(cache.σ), x=copy(cache.x), fx=copy(cache.fx), inner_history))
+        push!(stats.history, (;ρ=copy(cache.ρ), σ=copy(cache.σ), x=copy(cache.x), fx=copy(cache.fx), inner_history))
     end
 
     return retcode
@@ -251,7 +216,6 @@ function get_retcode(optimizer::CCSAOptimizer)
 end
 
 function solve!(optimizer::CCSAOptimizer; verbosity=0)
-
     retcode = :CONTINUE
     while retcode == :CONTINUE
         retcode = step!(optimizer; verbosity)
