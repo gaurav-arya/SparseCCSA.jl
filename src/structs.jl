@@ -14,8 +14,9 @@ Cache of all mutable information maintained by CCSAOptimizer.
     ## Buffers used by inner iteration logic.
     Δx_proposed::Vector{T}
     x_proposed::Vector{T}
-    gx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints
-    fx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints
+    gx_proposed::Vector{T} # (m+1) x 1 values of approximate objective and constraints at x_proposed
+    fx_proposed::Vector{T} # (m+1) x 1 values of true objective and constraints at x_proposed
+    jac_fx_proposed::L # (m+1) x n Jacobian linear operator at x_proposeed
 
     ## Buffers used in outer iteration logic.
     x_prev::Vector{T} # n x 1 xᵏ⁻¹ 
@@ -34,8 +35,8 @@ function allocate_cache(; n, m, T, jac_prototype)
     return CCSACache(; x = zeros(T, n), fx = zeros(T, m + 1), jac_fx = copy(jac_prototype),
                    ρ = zeros(T, m + 1),
                    σ = zeros(T, n), lb = zeros(T, n), ub = zeros(T, n),
-                   Δx_proposed = zeros(T, n), x_proposed = zeros(T, n),
-                   gx_proposed = zeros(T, m + 1), fx_proposed = zeros(T, m + 1),
+                   Δx_proposed = zeros(T, n), x_proposed = zeros(T, n), gx_proposed = zeros(T, m + 1),
+                   fx_proposed = zeros(T, m + 1), jac_fx_proposed = copy(jac_prototype),
                    x_prev = zeros(T, n), x_prevprev = zeros(T, n), fx_prev = zeros(T, m + 1),
                    a = zeros(T, n), b = zeros(T, n), Δx = zeros(T, n), 
                    λ_all = zeros(T, m + 1), grad_gλ_all = zeros(T, m + 1))
