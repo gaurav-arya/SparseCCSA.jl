@@ -1,11 +1,17 @@
 @kwdef mutable struct CCSASettings
-    xtol_rel::T = nothing # relative tolerence of solution
-    xtol_abs::T = nothing # absolute tolerence of solution
-    ftol_rel::T = nothing # relative tolerence of objective 
-    ftol_abs::T = nothing # absolute tolerence of objective
-    max_iters::Int = nothing # max number of iterations
-    max_inner_iters::Int = nothing # max number of inner iterations
+    xtol_rel::T = zero(T) # relative tolerence of solution
+    xtol_abs::T = zero(T) # absolute tolerence of solution
+    ftol_rel::T = zero(T) # relative tolerence of objective 
+    ftol_abs::T = zero(T) # absolute tolerence of objective
+    max_iters::Int = typemax(T) # max number of iterations
+    max_inner_iters::Int = typemax(T) # max number of inner iterations
 end
+# TODO: ensure at least one stopping condition
+# function has_stopping_condition(settings::CCSASettings) 
+#     return (settings.xtol_rel > zero(T)) || (settings.xtol_abs > zero(T)) ||
+#            (settings.ftol_rel > zero(T)) || (settings.ftol_abs > zero(T)) ||
+#            (settings.max_iters < typemax(T))
+# end
 
 @kwdef mutable struct CCSAStats
     outer_iters_done::Int = 0
@@ -92,8 +98,9 @@ Free to allocate here.
 """
 # TODO: defaults for kwargs below
 function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=nothing, 
-              max_iters=nothing, max_inner_iters=nothing, max_dual_iters=nothing, 
-              max_dual_inner_iters=nothing)
+              max_iters=nothing, max_inner_iters=nothing, ftol_abs=nothing, ftol_rel=nothing,
+              max_dual_iters=nothing, max_dual_inner_iters=nothing, dual_ftol_abs=nothing,
+              dual_ftol_rel=nothing)
 
     # Allocate primal iterate, with n variables and m constraints
     iterate = allocate_iterate(; n, m, T, jac_prototype)
@@ -109,9 +116,10 @@ function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=noth
                                    buffers = dual_buffers,
                                    dual_optimizer = nothing,
                                    settings = CCSASettings(; max_iters = max_dual_iters, 
-                                                           max_inner_iters = max_dual_inner_iters))
+                                                           max_inner_iters = max_dual_inner_iters,
+                                                           ftol_abs = dual_ftol_abs, ftol_rel = dual_ftol_rel))
     optimizer = CCSAOptimizer(; f_and_jac, iterate, buffers, dual_optimizer,
-                                settings = CCSASettings(; max_iters, max_inner_iters))
+                                settings = CCSASettings(; max_iters, max_inner_iters, ftol_abs, ftol_rel))
 
     # Initialize optimizer
     x0 = (x0 === nothing) ? zeros(T, n) : copy(x0)
@@ -133,6 +141,17 @@ What are the invariants / contracts?
 """
 function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
     @unpack f_and_jac, iterate, dual_optimizer, stats, settings = optimizer
+
+    retcode = get_retcode(optimizer)
+    (retcode != :CONTINUE) && return retcode
+
+    if optimizer.stats.outer_iters_done > 0
+        # Push new x into storage of previous x's
+        iterate.x_prevprev .= iterate.x_prev
+        iterate.x_prev .= iterate.x
+        # Push new fx[1] into storage of previous fx[1]
+        iterate.fx_prev .= iterate.fx
+    end
 
     # Solve the dual problem, searching for a conservative solution. 
     inner_history = verbosity > 0 ? DataFrame() : nothing
@@ -191,7 +210,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
 
     # Update σ based on monotonicity of changes
     # only do this after the first iteration, similar to nlopt, since this should be a nullop after first update
-    if optimizer.stats.outer_iters_done > 0
+    if optimizer.stats.outer_iters_done > 1
         for i in eachindex(iterate.σ)
             Δx2 = (iterate.x[i] - iterate.x_prev[i]) * (iterate.x_prev[i] - iterate.x_prevprev[i])
             scaled = (Δx2 < 0 ? 0.7 : (Δx2 > 0 ? 1.2 : 1)) * iterate.σ[i]
@@ -204,10 +223,6 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
         end
     end
 
-    # Push new x into storage of previous x's
-    iterate.x_prevprev .= iterate.x_prev
-    iterate.x_prev .= iterate.x
-
     # Reduce ρ (be less conservative)
     @. iterate.ρ = max(iterate.ρ / 10, 1e-5)
 
@@ -215,31 +230,34 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
         push!(optimizer.history, (;ρ=copy(iterate.ρ), σ=copy(iterate.σ), x=copy(iterate.x), fx=copy(iterate.fx), inner_history))
     end
 
-    #=
-        if norm(optimizer.Δx, Inf) < optimizer.xtol_abs
-            optimizer.RET = :XTOL_ABS
-            return
+    return retcode
+end
+
+function get_retcode(optimizer::CCSAOptimizer)
+    @unpack stats, settings = optimizer
+
+    if (stats.outer_iters_done !== nothing) && (stats.outer_iters_done >= settings.max_iters)
+        return :MAX_ITERS
+    end
+
+    if (stats.outer_iters_done > 1)
+        # Objective tolerance 
+        Δfx = abs(iterate.fx[1] - iterate.fx_prev[1])  
+        if (optimizer.ftol_abs !== nothing) && (Δfx < optimizer.ftol_abs)
+            return :FTOL_ABS
+        elseif (optimizer.ftol_rel !== nothing) && (Δfx / iterate.fx[1] < optimizer.ftol_rel)
+            return :FTOL_REL
         end
-        if norm(optimizer.Δx, Inf) / norm(optimizer.x, Inf)  < optimizer.xtol_rel
-            optimizer.RET = :XTOL_REL
-            return
-        end
-        if norm(Δxf, Inf) < optimizer.ftol_abs
-            optimizer.RET = :FTOL_REL
-            return
-        end
-        if norm(Δxf, Inf) / norm(f, Inf) < optimizer.ftol_rel
-            optimizer.RET = :FTOL_REL
-            return
-        end
-    =#
+    end
+
+    return :CONTINUE
 end
 
 function solve!(optimizer::CCSAOptimizer; verbosity=0)
 
-    # TODO: catch stopping conditions in opt and exit here
-    for i in 1:(optimizer.max_iters)
-        step!(optimizer; verbosity)
+    while true
+        retcode = step!(optimizer; verbosity)
+        (retcode != :CONTINUE) && break
     end
-    return (; x=optimizer.iterate.x, fx=optimizer.iterate.fx, retcode=:MAX_ITERS, iters=optimizer.max_iters)
+    return (; x=optimizer.iterate.x, fx=optimizer.iterate.fx, retcode, iters=optimizer.max_iters)
 end
