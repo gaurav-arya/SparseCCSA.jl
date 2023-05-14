@@ -11,7 +11,7 @@ function sparseccsa_dataframe(iters=1)
                max_inner_iters = 150,
                max_dual_iters = 150, max_dual_inner_iters = 150)
 
-    solve!(opt)
+    solve!(opt; verbosity=2)
     return opt.history
 end
 

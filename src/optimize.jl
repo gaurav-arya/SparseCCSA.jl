@@ -155,7 +155,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
     end
 
     # Solve the dual problem, searching for a conservative solution. 
-    inner_history = verbosity > 0 ? DataFrame() : nothing
+    inner_history = verbosity > 1 ? DataFrame() : nothing
     while true 
         dual_sol = propose_Δx!(iterate.Δx_proposed, optimizer; verbosity)
 
@@ -178,7 +178,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
             end
         end
 
-        if verbosity > 0
+        if verbosity > 1
             push!(inner_history, (;dual_iters=dual_sol.stats.outer_iters_done, dual_obj=-dual_sol.fx[1], 
                                    dual_opt=dual_sol.x[1], 
                                    ρ=copy(iterate.ρ), 
@@ -258,7 +258,7 @@ end
 function solve!(optimizer::CCSAOptimizer; verbosity=0)
 
     retcode = :CONTINUE
-    while retcode != :CONTINUE
+    while retcode == :CONTINUE
         retcode = step!(optimizer; verbosity)
     end
     return (; x=optimizer.iterate.x, fx=optimizer.iterate.fx, retcode, stats=optimizer.stats)
