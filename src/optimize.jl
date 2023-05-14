@@ -20,6 +20,8 @@ end
 function reinit!(optimizer::CCSAOptimizer{T}; x0=nothing, lb=nothing, ub=nothing) where {T}
     @unpack iterate, dual_optimizer = optimizer
 
+    # hmm, maybe there should be a separate init method afteer all. because we need to get lb/ub/etc. defaults correct here.
+
     # initialize lb and ub
     (lb === nothing) ? (iterate.lb .= typemin(T)) : (iterate.lb .= lb)
     (ub === nothing) ? (iterate.ub .= typemin(T)) : (iterate.ub .= ub)
