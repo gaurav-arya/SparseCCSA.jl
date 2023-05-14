@@ -1,20 +1,28 @@
-#=
-    xtol_rel::T # relative tolerence
-    xtol_abs::T # absolute tolerence
-    ftol_rel::T # relative tolerence
-    ftol_abs::T # absolute tolerence
-    max_iters::Int # max number of iterations
-=#
+@kwdef mutable struct CCSASettings
+    xtol_rel::T = nothing # relative tolerence
+    xtol_abs::T = nothing # absolute tolerence
+    ftol_rel::T = nothing # relative tolerence
+    ftol_abs::T = nothing # absolute tolerence
+    max_iters::Int = nothing # max number of iterations
+    max_inner_iters::Int = nothing # max number of inner iterations
+end
 
-@kwdef struct CCSAOptimizer{T, F, L, D, H, SC, ST}
+@kwdef mutable struct CCSAStats
+    outer_iters_done::Int = 0
+    inner_iters_done::Int = 0
+end
+function reset!(stats::CCSAStats)
+    stats.outer_iters_done = 0
+    stats.inner_iters_done = 0
+end
+
+@kwdef struct CCSAOptimizer{T, F, L, D, H}
     f_and_jac::F # f(x) = (m+1, (m+1) x n linear operator)
     iterate::Iterate{T, L}
     buffers::DualBuffers{T}
     dual_optimizer::D
-    stopping_conditions::SC
-    stats::ST = (; outer_iters_done=0, inner_iters_done=0)
-    max_iters::Int
-    max_inner_iters::Int
+    settings::CCSASettings
+    stats::CCSAStats = CCSAStats()
     history::H = DataFrame()
 end
 
@@ -22,8 +30,7 @@ function reinit!(optimizer::CCSAOptimizer{T}; x0=nothing, lb=nothing, ub=nothing
     @unpack iterate, dual_optimizer = optimizer
 
     # reset optimizer stats 
-    @set! optimizer.stats.outer_iters_done = 0
-    @set! optimizer.stats.inner_iters_done = 0
+    reset!(optimizer.stats)
     # initialize lb and ub
     (lb !== nothing) && (iterate.lb .= lb) 
     (ub !== nothing) && (iterate.ub .= ub) 
@@ -101,10 +108,10 @@ function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=noth
     dual_optimizer = CCSAOptimizer(; f_and_jac = dual_evaluator, iterate = dual_iterate,
                                    buffers = dual_buffers,
                                    dual_optimizer = nothing,
-                                   stopping_conditions = (;max_iters = max_dual_iters, 
-                                                           max_inner_iters = max_dual_inner_iters)) 
+                                   settings = CCSASettings(; max_iters = max_dual_iters, 
+                                                           max_inner_iters = max_dual_inner_iters))
     optimizer = CCSAOptimizer(; f_and_jac, iterate, buffers, dual_optimizer,
-                                stopping_conditions = (;max_iters, max_inner_iters))
+                                settings = CCSASettings(; max_iters, max_inner_iters))
 
     # Initialize optimizer
     x0 = (x0 === nothing) ? zeros(T, n) : copy(x0)
@@ -125,11 +132,11 @@ What are the invariants / contracts?
 - optimizer.dual_optimizer contains a ref to optimizer.iterate, so updating latter implicitly updates the former. 
 """
 function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
-    @unpack f_and_jac, iterate, max_inner_iters, dual_optimizer = optimizer
+    @unpack f_and_jac, iterate, dual_optimizer, stats, settings = optimizer
 
     # Solve the dual problem, searching for a conservative solution. 
     inner_history = verbosity > 0 ? DataFrame() : nothing
-    for i in 1:max_inner_iters
+    while true 
         dual_sol = propose_Δx!(iterate.Δx_proposed, optimizer; verbosity)
 
         # Compute conservative approximation g at proposed point.
@@ -167,20 +174,20 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
         # so long as we are still feasible. (Done mostly for consistency with nlopt.) 
         feasible = all(<=(0), iterate.fx_proposed[2:end])
         better_opt = iterate.fx_proposed[1] < iterate.fx[1]
-        inner_done = conservative || (i == max_inner_iters) 
+        inner_done = conservative || (i == settings.max_inner_iters) 
         if feasible && (better_opt || inner_done)
             # Update iterate
             iterate.x .= iterate.x_proposed
             f_and_jac(iterate.fx, iterate.jac_fx, iterate.x) # TODO: can avoid this call if we store jac_fx_proposed in prev call
         end
 
-        @set! optimizer.stats.inner_iters_done += 1
+        optimizer.stats.inner_iters_done += 1
 
         # Break out if conservative
         inner_done && break
     end
 
-    @set! optimizer.stats.outer_iters_done += 1
+    optimizer.stats.outer_iters_done += 1
 
     # Update σ based on monotonicity of changes
     # only do this after the first iteration, similar to nlopt, since this should be a nullop after first update
