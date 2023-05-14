@@ -164,14 +164,15 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
         # so long as we are still feasible. (Done mostly for consistency with nlopt.) 
         feasible = all(<=(0), iterate.fx_proposed[2:end])
         better_opt = iterate.fx_proposed[1] < iterate.fx[1]
-        if feasible && better_opt
+        inner_done = conservative || (i == max_inner_iters) 
+        if feasible && (better_opt || inner_done)
             # Update iterate
             iterate.x .= iterate.x_proposed
             f_and_jac(iterate.fx, iterate.jac_fx, iterate.x) # TODO: can avoid this call if we store jac_fx_proposed in prev call
         end
 
         # Break out if conservative
-        if conservative || (i == max_inner_iters) 
+        if inner_done 
             # (!conservative && is_primal) && @info "Could not find conservative approx for $str"
             break
         end
