@@ -44,7 +44,7 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
     else
         # the "dual dual" problem has 0 variables and 0 contraints, but running it allows us to retrieve the proposed Δx [length m].
         dual_dual_evaluator = DualEvaluator(; cache = optimizer.cache)
-        dual_dual_evaluator(MArray(SA[zero(T)]), SVector{0, T}(), SVector{0, T}())
+        dual_dual_evaluator(nothing, nothing, nothing) 
 
         Δx .= optimizer.cache.Δx
 
