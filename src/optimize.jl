@@ -29,23 +29,23 @@ end
 function reinit!(optimizer::CCSAOptimizer{T}; x0=nothing, lb=nothing, ub=nothing) where {T}
     @unpack iterate, dual_optimizer = optimizer
 
-    # reset optimizer stats 
+    # Reset optimizer stats 
     reset!(optimizer.stats)
-    # initialize lb and ub
+    # Initialize lb and ub
     (lb !== nothing) && (iterate.lb .= lb) 
     (ub !== nothing) && (iterate.ub .= ub) 
-    # reinitialize ρ and σ
-    iterate.ρ .= one(T) # reinitialize penality weights
+    # Reinitialize ρ and σ
+    iterate.ρ .= one(T)
     map!(iterate.σ, iterate.lb, iterate.ub) do lb, ub
         (isinf(lb) || isinf(ub)) ? 1.0 : (ub - lb) / 2.0
     end
-    # reinitialize starting point (default: keep what we are already at)
+    # Reinitialize starting point (default: keep what we are already at)
     (x0 !== nothing) && (iterate.x .= x0) 
     iterate.x_prev .= iterate.x 
     iterate.x_prevprev .= iterate.x 
-    # reinitialize function evaluation and Jacobian
+    # Reinitialize function evaluation and Jacobian
     optimizer.f_and_jac(iterate.fx, iterate.jac_fx, iterate.x)
-    # recursively reinitalize dual optimizer
+    # Recursively reinitalize dual optimizer
     if dual_optimizer !== nothing
         reinit!(dual_optimizer; x0=zero(T), lb=zero(T), ub=typemax(T))
     end
@@ -67,7 +67,7 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
 
         Δx .= dual_evaluator.buffers.Δx
 
-        # return dual soln object (used for logging)
+        # Return dual solution object (used for logging)
         return dual_sol 
     else
         # the "dual dual" problem has 0 variables and 0 contraints, but running it allows us to retrieve the proposed Δx [length m].
