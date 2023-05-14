@@ -20,8 +20,9 @@ end
 function reinit!(optimizer::CCSAOptimizer{T}; x0=nothing, lb=nothing, ub=nothing) where {T}
     @unpack iterate, dual_optimizer = optimizer
 
+    # reset iteration count
+    optimizer.iter = 1
     # initialize lb and ub
-    
     (lb !== nothing) && (iterate.lb .= lb) 
     (ub !== nothing) && (iterate.ub .= ub) 
     # reinitialize ρ and σ
