@@ -1,10 +1,10 @@
-@kwdef mutable struct CCSASettings{T1, T2, T3, T4}
+@kwdef mutable struct CCSASettings{T1, T2, T3, T4, T5, T6}
     xtol_rel::T1 = nothing # relative tolerence of solution
     xtol_abs::T2 = nothing # absolute tolerence of solution
     ftol_rel::T3 = nothing # relative tolerence of objective 
     ftol_abs::T4 = nothing # absolute tolerence of objective
-    max_iters::Int = nothing # max number of iterations
-    max_inner_iters::Int = nothing # max number of inner iterations
+    max_iters::T5 = nothing # max number of iterations
+    max_inner_iters::T6 = nothing # max number of inner iterations
 end
 # TODO: ensure at least one stopping condition
 # function has_stopping_condition(settings::CCSASettings) 
@@ -238,7 +238,7 @@ end
 function get_retcode(optimizer::CCSAOptimizer)
     @unpack iterate, stats, settings = optimizer
 
-    if (stats.outer_iters_done !== nothing) && (stats.outer_iters_done >= settings.max_iters)
+    if (settings.max_iters !== nothing) && (stats.outer_iters_done >= settings.max_iters)
         return :MAX_ITERS
     end
 
@@ -247,7 +247,7 @@ function get_retcode(optimizer::CCSAOptimizer)
         Δfx = abs(iterate.fx[1] - iterate.fx_prev[1])  
         if (settings.ftol_abs !== nothing) && (Δfx < settings.ftol_abs)
             return :FTOL_ABS
-        elseif (settings.ftol_rel !== nothing) && (Δfx / iterate.fx[1] < settings.ftol_rel)
+        elseif (settings.ftol_rel !== nothing) && (abs(Δfx / iterate.fx[1]) < settings.ftol_rel)
             return :FTOL_REL
         end
     end
