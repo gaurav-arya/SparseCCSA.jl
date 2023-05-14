@@ -12,7 +12,7 @@ function sparseccsa_dataframe(iters=1)
     ) 
 
     solve!(opt; verbosity=2)
-    return opt.history
+    return opt.stats.history
 end
 
 export sparseccsa_dataframe

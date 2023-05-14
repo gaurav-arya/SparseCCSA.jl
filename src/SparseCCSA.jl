@@ -10,6 +10,7 @@ import Base.@kwdef
 
 export init, solve!, step!, reinit!
 
+include("structs.jl")
 include("dual.jl")
 include("optimize.jl")
 
