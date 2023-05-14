@@ -1,8 +1,8 @@
 @kwdef mutable struct CCSASettings
-    xtol_rel::T = nothing # relative tolerence
-    xtol_abs::T = nothing # absolute tolerence
-    ftol_rel::T = nothing # relative tolerence
-    ftol_abs::T = nothing # absolute tolerence
+    xtol_rel::T = nothing # relative tolerence of solution
+    xtol_abs::T = nothing # absolute tolerence of solution
+    ftol_rel::T = nothing # relative tolerence of objective 
+    ftol_abs::T = nothing # absolute tolerence of objective
     max_iters::Int = nothing # max number of iterations
     max_inner_iters::Int = nothing # max number of inner iterations
 end
