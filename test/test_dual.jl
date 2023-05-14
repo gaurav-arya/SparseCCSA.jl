@@ -29,14 +29,13 @@ using ForwardDiff
     Δx_solution([0.0, 0.0])
 
     # Form dual evaluator 
-    iterate = SparseCCSA.allocate_iterate(; n = 2, m = 2, T = Float64, jac_prototype = [2 1; 1 0; 0 1])
-    iterate.x .= 1.0
-    iterate.ρ .= 1.0
-    iterate.σ .= 1.0
-    iterate.lb .= [-Inf, -Inf]
-    iterate.ub .= [Inf, Inf]
-    buffers = SparseCCSA.allocate_buffers(; T = Float64, n = 2, m = 2)
-    dual_evaluator = SparseCCSA.DualEvaluator(; iterate, buffers)
+    cache = SparseCCSA.allocate_cache(; n = 2, m = 2, T = Float64, jac_prototype = [2 1; 1 0; 0 1])
+    cache.x .= 1.0
+    cache.ρ .= 1.0
+    cache.σ .= 1.0
+    cache.lb .= [-Inf, -Inf]
+    cache.ub .= [Inf, Inf]
+    dual_evaluator = SparseCCSA.DualEvaluator(; cache)
 
     # Compare dual evaluator output to analytic
     for λ in ([1.0, 1.0], [1.0, 2.0], [2.0, 1.0], [5.5, 3.2], rand(2))
@@ -58,6 +57,6 @@ using ForwardDiff
         dual_evaluator(gλ, ∇gλ, λ)
         @test gλ[1] ≈ h(λ) # dual objective
         @test ∇gλ ≈ ForwardDiff.gradient(h, λ)' # dual gradient 
-        @test dual_evaluator.buffers.Δx ≈ Δx_solution(λ) # primal solution for dual = λ
+        @test cache.Δx ≈ Δx_solution(λ) # primal solution for dual = λ
     end
 end
