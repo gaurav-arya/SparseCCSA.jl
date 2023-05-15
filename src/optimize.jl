@@ -27,7 +27,7 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
     if optimizer.dual_optimizer !== nothing
         dual_optimizer = optimizer.dual_optimizer
         reinit!(dual_optimizer)
-        dual_sol = solve!(dual_optimizer; verbosity=verbosity-1)
+        dual_sol = solve!(dual_optimizer; verbosity=Val(_unwrap_val(verbosity)-1))
 
         # We can form the dual evaluator with DualEvaluator(; cache = optimizer.cache),
         # but since we have already formed it for the dual optimizer we just retrieve it here.  
@@ -86,6 +86,9 @@ function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=noth
     return optimizer
 end
 
+# Utility for unwrapping verbosity value
+_unwrap_val(::Val{x}) where {x} = x
+
 """
     step!(optimizer::AbstractCCSAOptimizer)
 
@@ -95,7 +98,7 @@ What are the invariants / contracts?
 - optimizer.cache.{fx,jac_fx} come from applying optimizer.f_and_jac at optimizer.cache.x
 - optimizer.dual_optimizer contains a ref to optimizer.cache, so updating latter implicitly updates the former. 
 """
-function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
+function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
     @unpack f_and_jac, cache, dual_optimizer, stats, settings = optimizer
 
     retcode = get_retcode(optimizer)
@@ -110,7 +113,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
     end
 
     # Solve the dual problem, searching for a conservative solution. 
-    inner_history = verbosity > 1 ? DataFrame() : nothing
+    inner_history = _unwrap_val(verbosity) > 1 ? DataFrame() : nothing
     while true 
         dual_sol = propose_Δx!(cache.Δx_proposed, optimizer; verbosity)
 
@@ -133,7 +136,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
             end
         end
 
-        if verbosity > 1
+        if _unwrap_val(verbosity) > 1
             push!(inner_history, (;dual_iters=dual_sol.stats.outer_iters_done, dual_obj=-dual_sol.fx[1], 
                                    dual_opt=dual_sol.x[1], 
                                    ρ=copy(cache.ρ), 
@@ -184,7 +187,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
     # Reduce ρ (be less conservative)
     @. cache.ρ = max(cache.ρ / 10, 1e-5)
 
-    if verbosity > 0
+    if _unwrap_val(verbosity) > 0
         push!(stats.history, (;ρ=copy(cache.ρ), σ=copy(cache.σ), x=copy(cache.x), fx=copy(cache.fx), inner_history))
     end
 
@@ -211,7 +214,7 @@ function get_retcode(optimizer::CCSAOptimizer)
     return :CONTINUE
 end
 
-function solve!(optimizer::CCSAOptimizer; verbosity=0)
+function solve!(optimizer::CCSAOptimizer; verbosity=Val(0))
     retcode = :CONTINUE
     while retcode == :CONTINUE
         retcode = step!(optimizer; verbosity)

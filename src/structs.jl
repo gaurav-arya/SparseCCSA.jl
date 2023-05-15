@@ -85,12 +85,12 @@ end
 """
 Steppable CCSAOptimizer structure.
 """
-@kwdef struct CCSAOptimizer{T, F, L, D, H}
+@kwdef struct CCSAOptimizer{T, F, L, D, S <: CCSASettings, ST <: CCSAStats}
     f_and_jac::F # f(x) = (m+1, (m+1) x n linear operator)
     cache::CCSACache{T, L}
     dual_optimizer::D
-    settings::CCSASettings
-    stats::CCSAStats{H} = CCSAStats()
+    settings::S
+    stats::ST = CCSAStats()
 end
 
 """

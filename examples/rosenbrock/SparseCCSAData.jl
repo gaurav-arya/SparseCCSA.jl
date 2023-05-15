@@ -12,7 +12,7 @@ function sparseccsa_dataframe(iters=1)
                dual_ftol_abs=1e-15, dual_ftol_rel=1e-15
     ) 
 
-    solve!(opt; verbosity=2)
+    solve!(opt; verbosity=Val(2))
     return opt.stats.history
 end
 
