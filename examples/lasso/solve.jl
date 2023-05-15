@@ -28,4 +28,3 @@ opt = init(f_and_jac, 2p, 2p, Float64, jac_prototype;
             x0 = u0_and_t0, max_iters = 1000,
             dual_ftol_abs=1e-15, dual_ftol_rel=1e-15
 ) 
-
