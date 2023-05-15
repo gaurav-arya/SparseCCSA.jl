@@ -207,14 +207,16 @@ function get_retcode(optimizer::CCSAOptimizer)
         Δfx = abs(cache.fx[1] - cache.fx_prev[1])  
         if (settings.ftol_abs !== nothing) && (Δfx < settings.ftol_abs)
             return :FTOL_ABS
-        elseif (settings.ftol_rel !== nothing) && (abs(Δfx / cache.fx[1]) < settings.ftol_rel)
+        elseif (settings.ftol_rel !== nothing) && 
+               (abs(Δfx) / min(abs(cache.fx[1]), abs(cache.fx_prev[1])) < settings.ftol_rel)
             return :FTOL_REL
         end
         # Solution tolerance
         Δx_norm = norm(Iterators.map(-, cache.x, cache.x_prev))
         if (settings.xtol_abs !== nothing) && (Δx_norm < settings.xtol_abs)
             return :XTOL_ABS
-        elseif (settings.xtol_rel !== nothing) && (Δx_norm / norm(cache.x) < settings.xtol_rel) 
+        elseif (settings.xtol_rel !== nothing) && 
+               (Δx_norm / min(norm(cache.x), norm(cache.x_prev)) < settings.xtol_rel) 
             return :XTOL_REL
         end
     end
