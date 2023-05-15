@@ -6,7 +6,7 @@ using LinearAlgebra
 
 begin
 n = 4
-p = 7
+p = 8
 S = 2
 (;u, G, y) = setup_lasso(n, p, S)
 α = 1e-2
@@ -73,58 +73,19 @@ end
 begin
 (;f_and_jac, jac_prototype) = lasso_epigraph(G, y, α)
 fx = zeros(2p+1)
-u = uestsp#h.x[end][1:p]
-f_and_jac(fx, jac_prototype, vcat(u, abs.(u)))
+_u = uestsp#h.x[end][1:p]
+f_and_jac(fx, jac_prototype, vcat(_u, abs.(_u)))
 fx
 jac_prototype
 end
-
-h.fx[64][1]
-lines((a -> a[7]).(h.x))
-
-
-h.inner_history[46].dual_info[2].dual_history.fx
-h.fx[end-1]
-h.σ[end-1]
-h.ρ[end-2]
-h.inner_history[end-4].ρ
-h.inner_history[end].fx_proposed
-h.inner_history[end].gx_proposed
 
 norm(uestsp - uest) / norm(uest)
 norm(uestsp - u) / norm(u)
 
 ## OK, time to try NLopt instead
 
-function obj(x, grad)
-    f_and
-    if length(grad) > 0
-        grad .= ForwardDiff.gradient(x -> f(x)[1], x)
-    end
-    return f(x)[1]
-end
+includet("NLoptLassoData.jl")
+using .NLoptLassoData
+uestnl = run_once_nlopt(G, y, α)[2][1:p]
 
-function consi(x, grad, i)
-    iv = SparseCCSA._unwrap_val(i)
-    if length(grad) > 0
-        grad .= ForwardDiff.gradient(x -> f(x)[iv], x)
-    end
-    return f(x)[2]
-end
-
-function run_once_nlopt(evals)
-    nlopt = Opt(:LD_CCSAQ, 2)
-    nlopt.lower_bounds = [-1.0, -1.0]
-    nlopt.upper_bounds = [2.0, 2.0]
-    nlopt.maxeval = evals 
-    nlopt.xtol_rel = 0.0
-    nlopt.xtol_abs = 0.0
-    nlopt.params["verbosity"] = 2
-    nlopt.params["max_inner_iters"] = 1
-
-    nlopt.min_objective = obj 
-    inequality_constraint!(nlopt, cons1)
-
-    (minf,minx,ret) = optimize(nlopt, [0.5, 0.5])
-    return minf,minx,ret
-end
+norm(uestsp - uestnl) / norm(uestnl)
