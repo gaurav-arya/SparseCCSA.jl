@@ -44,8 +44,8 @@ function run_once_nlopt(G, y, α)
     nlopt.lower_bounds = vcat(fill(-Inf, p), zeros(p)) 
     nlopt.upper_bounds = fill(Inf, 2p)
     nlopt.maxeval = 1000 
-    # nlopt.xtol_rel = 0.0
-    # nlopt.xtol_abs = 0.0
+    nlopt.xtol_rel = 0.0
+    nlopt.xtol_abs = 0.0
     nlopt.params["verbosity"] = 2
 
     nlopt.min_objective = make_obj(G, y, α)
