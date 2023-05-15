@@ -25,6 +25,10 @@ u0_and_t0 = vcat(u0, t)
 
 opt = init(f_and_jac, 2p, 2p, Float64, jac_prototype;
             lb=vcat(fill(-Inf, p), zeros(p)), ub=Inf,
-            x0 = u0_and_t0, max_iters = 1000,
-            dual_ftol_abs=1e-15, dual_ftol_rel=1e-15
+            x0 = u0_and_t0, max_iters = 1,
+            # max_inner_iters=5,
+            # max_dual_iters=5,
+            # max_dual_inner_iters=5,
+            dual_ftol_abs=1e-7, dual_ftol_rel=1e-7
 ) 
+solve!(opt)
