@@ -4,9 +4,9 @@ __revise_mode__ = :eval
 using Random
 using Statistics
 using Symbolics
+using SparseArrays
 
-function setup_lasso(n, p)
-    S = 3
+function setup_lasso(n, p, S)
     G = randn(n, p)
 
     rng = Xoshiro(n + p) # make problem deterministic given n and p
@@ -26,9 +26,15 @@ Return the f_and_jac function for Lasso's epigraph formulation.
 """
 function lasso_epigraph(G, y, α)
     n, p = size(G)
-    ∇cons = Symbolics.jacobian_sparsity((y, x) -> (y .= vcat(x[1:p] - x[(p + 1):(2p)],
-                                                            x[1:p] + x[(p + 1):(2p)])),
-                                        zeros(2p), zeros(2p))
+    ∇cons = spzeros(2p, 2p) 
+    for i in 1:p
+        ∇cons[i, i] = 1
+        ∇cons[i, p + i] = -1
+    end
+    for i in (p+1):2p
+        ∇cons[i, i-p] = -1
+        ∇cons[i, i] = -1
+    end
     f_and_jac = (fx, jac, u_and_t) -> begin
         u = @view u_and_t[1:p]
         t = @view u_and_t[(p + 1):(2p)]
@@ -40,7 +46,7 @@ function lasso_epigraph(G, y, α)
         end
         return nothing
     end
-    return (;f_and_jac, jac_prototype = vcat(zeros(2 * p)', ∇cons))
+    return (;f_and_jac, jac_prototype = vcat(ones(2 * p)', ∇cons))
 end
 
 export setup_lasso, lasso_epigraph

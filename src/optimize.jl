@@ -146,6 +146,8 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
                                    x_proposed=copy(cache.x_proposed),
                                    Δx_proposed=copy(cache.Δx_proposed),
                                    conservative=cache.gx_proposed .> cache.fx_proposed,
+                                   fx_proposed=copy(cache.fx_proposed),
+                                   gx_proposed=copy(cache.gx_proposed),
             ))
         end
 
