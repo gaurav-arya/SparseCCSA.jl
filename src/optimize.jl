@@ -57,9 +57,9 @@ Free to allocate here.
 """
 # TODO: defaults for kwargs below
 function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=nothing, 
-              max_iters=nothing, max_inner_iters=nothing, ftol_abs=nothing, ftol_rel=nothing,
-              max_dual_iters=nothing, max_dual_inner_iters=nothing, dual_ftol_abs=nothing,
-              dual_ftol_rel=nothing)
+              max_iters=nothing, max_inner_iters=nothing, max_dual_iters=nothing, max_dual_inner_iters=nothing,
+              ftol_abs=nothing, ftol_rel=nothing, dual_ftol_abs=nothing, dual_ftol_rel=nothing,
+              xtol_abs=nothing, xtol_rel=nothing, dual_xtol_abs=nothing, dual_xtol_rel=nothing)
 
     # Allocate primal cache, with n variables and m constraints
     cache = allocate_cache(; n, m, T, jac_prototype)
@@ -72,9 +72,11 @@ function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=noth
                                    dual_optimizer = nothing,
                                    settings = CCSASettings(; max_iters = max_dual_iters, 
                                                            max_inner_iters = max_dual_inner_iters,
-                                                           ftol_abs = dual_ftol_abs, ftol_rel = dual_ftol_rel))
+                                                           ftol_abs = dual_ftol_abs, ftol_rel = dual_ftol_rel,
+                                                           xtol_abs = dual_xtol_abs, xtol_rel = dual_xtol_rel))
     optimizer = CCSAOptimizer(; f_and_jac, cache, dual_optimizer,
-                                settings = CCSASettings(; max_iters, max_inner_iters, ftol_abs, ftol_rel))
+                                settings = CCSASettings(; max_iters, max_inner_iters, 
+                                                        ftol_abs, ftol_rel, xtol_abs, xtol_rel))
 
     # Initialize optimizer
     x0 = (x0 === nothing) ? zeros(T, n) : copy(x0)
@@ -207,6 +209,13 @@ function get_retcode(optimizer::CCSAOptimizer)
             return :FTOL_ABS
         elseif (settings.ftol_rel !== nothing) && (abs(Δfx / cache.fx[1]) < settings.ftol_rel)
             return :FTOL_REL
+        end
+        # Solution tolerance
+        Δx_norm = norm(Iterators.map(-, cache.x, cache.x_prev))
+        if (settings.xtol_abs !== nothing) && (Δx_norm < settings.xtol_abs)
+            return :XTOL_ABS
+        elseif (settings.xtol_rel !== nothing) && (Δx_norm / norm(cache.x) < settings.xtol_rel) 
+            return :XTOL_REL
         end
     end
 
