@@ -36,11 +36,12 @@ function (evaluator::DualEvaluator{T})(neg_gλ, neg_grad_gλ, λ) where {T}
         # although we ultimately don't care about the first entry.
         grad_gλ_all .= 0
         mul!(grad_gλ_all, jac_fx, Δx)
-        grad_gλ_all .+= fx .+ mapreduce(abs2 ∘ /, +, Δx, σ; init=zero(T)) ./ 2 .* ρ
-        neg_grad_gλ .= -1 * (@view grad_gλ_all[2:end])'
+        grad_gλ_all .+= fx .+ sum(Iterators.map(abs2 ∘ /, Δx, σ); init=zero(T)) ./ 2 .* ρ
+        copyto!(neg_grad_gλ, (@view grad_gλ_all[2:end]))
+        neg_grad_gλ .*= -1
     end
 
-    neg_gλ[1] = -(dot(λ_all, fx) + mapreduce((ai, bi, Δxi) -> ai * Δxi^2 + bi * Δxi, +, a, b, Δx; init=zero(T)))
+    neg_gλ[1] = -(dot(λ_all, fx) + sum(Iterators.map((ai, bi, Δxi) -> ai * Δxi^2 + bi * Δxi, a, b, Δx); init=zero(T)))
 
     return nothing
 end

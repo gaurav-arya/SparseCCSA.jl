@@ -115,7 +115,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=0) where {T}
         dual_sol = propose_Δx!(cache.Δx_proposed, optimizer; verbosity)
 
         # Compute conservative approximation g at proposed point.
-        w = sum(abs2, cache.Δx_proposed ./ cache.σ) / 2
+        w = sum(Iterators.map(abs2 ∘ /, cache.Δx_proposed, cache.σ); init=zero(T)) / 2
         cache.gx_proposed .= cache.fx .+ cache.ρ .* w
         mul!(cache.gx_proposed, cache.jac_fx, cache.Δx_proposed, true, true)
 
