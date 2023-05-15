@@ -106,7 +106,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
     retcode = get_retcode(optimizer)
     (retcode != :CONTINUE) && return retcode
 
-    if optimizer.stats.outer_iters_done > 0
+    if stats.outer_iters_done > 0
         # Push new x into storage of previous x's
         cache.x_prevprev .= cache.x_prev
         cache.x_prev .= cache.x
@@ -115,6 +115,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
     end
 
     # Solve the dual problem, searching for a conservative solution. 
+    stats.inner_iters_cur_done = 0
     inner_history = _unwrap_val(verbosity) > 1 ? DataFrame() : nothing
     while true 
         dual_sol = propose_Δx!(cache.Δx_proposed, optimizer; verbosity)
