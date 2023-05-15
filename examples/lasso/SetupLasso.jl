@@ -12,7 +12,7 @@ function setup_lasso(n, p, S)
     rng = Xoshiro(n + p) # make problem deterministic given n and p
 
     u = zeros(p)
-    u[randperm(rng, p)[1:S]] .= rand(S)
+    u[randperm(rng, p)[1:S]] .= randn(S)
     η = randn(rng, n)
     y = G * u
     y += 0.05 * mean(abs.(y)) * η

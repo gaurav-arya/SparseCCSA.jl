@@ -6,10 +6,10 @@ using LinearAlgebra
 
 begin
 n = 4
-p = 4
+p = 7
 S = 2
 (;u, G, y) = setup_lasso(n, p, S)
-α = 1e-3
+α = 1e-2
 β = 0.0
 end
 
@@ -36,15 +36,15 @@ end
 
 begin
 f = Figure(resolution=(1200, 800))
-ax1 = Axis(f[1,1], xlabel="Iterations", ylabel="value")
+ax1 = Axis(f[1,1], xlabel="Iterations", ylabel="log(value)", yscale=log10)
 ax2 = Axis(f[1,2], xlabel="Iterations", ylabel="log(value)", yscale=log10)
 ax3 = Axis(f[2,1], xlabel="Iterations", ylabel="log(value)", yscale=log10)
 ax4 = Axis(f[2,2], xlabel="Iterations", ylabel="number")
 ax5 = Axis(f[1,3], xlabel="Iterations", ylabel="value")
 # objective
 lines!(ax1, (a -> a[1]).(h.fx), label="fx[1] (objective)")
-lines!(ax1, (a -> a[2]).(h.fx), label="fx[2] (constraint 1)")
-lines!(ax1, (a -> a[3]).(h.fx), label="fx[3] (constraint 2)")
+# lines!(ax1, (a -> a[2]).(h.fx), label="fx[2] (constraint 1)")
+# lines!(ax1, (a -> a[3]).(h.fx), label="fx[3] (constraint 2)")
 # ρ
 lines!(ax2, (a -> a[1]).(h.ρ), label="ρ[1]")
 lines!(ax2, (a -> a[2]).(h.ρ), label="ρ[2]")
@@ -70,19 +70,26 @@ axislegend(ax5; position=:rt)
 f
 end
 
-h[1, :].ρ
-h.inner_history[1].ρ[1]
-
-h.x[end]
-h.fx[end]
+begin
+(;f_and_jac, jac_prototype) = lasso_epigraph(G, y, α)
+fx = zeros(2p+1)
+u = uestsp#h.x[end][1:p]
+f_and_jac(fx, jac_prototype, vcat(u, abs.(u)))
+fx
+jac_prototype
+end
 
 h.fx[64][1]
 lines((a -> a[7]).(h.x))
 
 
-h.ρ
-
-h.inner_history[end].dual_info[1].dual_history 
+h.inner_history[46].dual_info[2].dual_history.fx
+h.fx[end-1]
+h.σ[end-1]
+h.ρ[end-2]
+h.inner_history[end-4].ρ
+h.inner_history[end].fx_proposed
+h.inner_history[end].gx_proposed
 
 norm(uestsp - uest) / norm(uest)
 norm(uestsp - u) / norm(u)
