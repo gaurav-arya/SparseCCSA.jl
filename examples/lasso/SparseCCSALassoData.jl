@@ -17,9 +17,10 @@ function sparseccsa_lasso_data(G, y, α)
                 lb=vcat(fill(-Inf, p), zeros(p)), ub=Inf,
                 x0 = u0_and_t0, 
                 max_iters = 1000,
-                max_inner_iters=50,
-                max_dual_iters=200,
-                max_dual_inner_iters=5
+                max_inner_iters=1000,
+                dual_ftol_rel=1e-14
+                # max_dual_iters=200,
+                # max_dual_inner_iters=5
     ) 
     sol = solve!(opt; verbosity=Val(2))
     return opt.stats.history

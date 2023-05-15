@@ -9,7 +9,7 @@ n = 4
 p = 4
 S = 2
 (;u, G, y) = setup_lasso(n, p, S)
-α = 1e-6
+α = 1e-3
 β = 0.0
 end
 
@@ -23,36 +23,57 @@ end
 
 ## Solve problem with CCSA
 
-using SparseCCSA
+includet("SparseCCSALassoData.jl")
+using .SparseCCSALassoData
+using CairoMakie
 
 begin
-(;f_and_jac, jac_prototype) = lasso_epigraph(G, y, α)
-u0 = rand(p)
-t0 = 2 * abs.(u0) # start the t's with some slack
-u0_and_t0 = vcat(u0, t0)
+h = sparseccsa_lasso_data(G, y, α)
+ih = h.inner_history[1]
+uestsp = h.x[end][1:p]
 end
 
-begin
-opt = init(f_and_jac, 2p, 2p, Float64, jac_prototype;
-            lb=vcat(fill(-Inf, p), zeros(p)), ub=Inf,
-            x0 = u0_and_t0, 
-            max_iters = 1000,
-            max_inner_iters=50,
-            max_dual_iters=200,
-            max_dual_inner_iters=5
-) 
-sol = solve!(opt; verbosity=Val(2))
-end
+h[1, :].ρ
+h.inner_history[1].ρ[1]
 
-begin
-h = opt.stats.history
-ih = h.inner_history[end]
-end
+h.inner_history[1].dual_info[1]
 
-sol.x
-uest
-u
-norm(sol.x[1:p] - uest) / norm(uest)
-norm(sol.x[1:p] - u) / norm(u)
+h.inner_history[1].dual_history[1] # this is a problem!
+
+norm(uestsp - uest) / norm(uest)
+norm(uestsp - u) / norm(u)
 
 ## OK, time to try NLopt instead
+
+function obj(x, grad)
+    f_and
+    if length(grad) > 0
+        grad .= ForwardDiff.gradient(x -> f(x)[1], x)
+    end
+    return f(x)[1]
+end
+
+function consi(x, grad, i)
+    iv = SparseCCSA._unwrap_val(i)
+    if length(grad) > 0
+        grad .= ForwardDiff.gradient(x -> f(x)[iv], x)
+    end
+    return f(x)[2]
+end
+
+function run_once_nlopt(evals)
+    nlopt = Opt(:LD_CCSAQ, 2)
+    nlopt.lower_bounds = [-1.0, -1.0]
+    nlopt.upper_bounds = [2.0, 2.0]
+    nlopt.maxeval = evals 
+    nlopt.xtol_rel = 0.0
+    nlopt.xtol_abs = 0.0
+    nlopt.params["verbosity"] = 2
+    nlopt.params["max_inner_iters"] = 1
+
+    nlopt.min_objective = obj 
+    inequality_constraint!(nlopt, cons1)
+
+    (minf,minx,ret) = optimize(nlopt, [0.5, 0.5])
+    return minf,minx,ret
+end

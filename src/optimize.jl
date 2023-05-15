@@ -118,7 +118,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
 
     # Solve the dual problem, searching for a conservative solution. 
     stats.inner_iters_cur_done = 0
-    inner_history = _unwrap_val(verbosity) > 1 ? DataFrame() : nothing
+    inner_history = _unwrap_val(verbosity) > 0 ? DataFrame() : nothing
     while true 
         dual_sol = propose_Δx!(cache.Δx_proposed, optimizer; verbosity)
 
@@ -141,16 +141,21 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
             end
         end
 
-        if _unwrap_val(verbosity) > 1
-            push!(inner_history, (;dual_iters=dual_sol.stats.outer_iters_done, dual_obj=-dual_sol.fx[1], 
-                                   dual_opt=dual_sol.x[1], 
-                                   ρ=copy(cache.ρ), 
+        if _unwrap_val(verbosity) > 0
+            dual_info = if dual_sol !== nothing
+                (;dual_iters=dual_sol.stats.outer_iters_done, dual_obj=-dual_sol.fx[1], 
+                  dual_opt=dual_sol.x[1], 
+                  dual_history=dual_sol.stats.history)
+            else
+                nothing
+            end
+            push!(inner_history, (;ρ=copy(cache.ρ), 
                                    x_proposed=copy(cache.x_proposed),
                                    Δx_proposed=copy(cache.Δx_proposed),
                                    conservative=cache.gx_proposed .> cache.fx_proposed,
                                    fx_proposed=copy(cache.fx_proposed),
                                    gx_proposed=copy(cache.gx_proposed),
-            ))
+                                   dual_info))
         end
 
         # We are guaranteed to have a better optimum once we find a conservative approximation.
