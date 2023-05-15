@@ -73,11 +73,14 @@ end
 begin
 (;f_and_jac, jac_prototype) = lasso_epigraph(G, y, α)
 fx = zeros(2p+1)
-_u = uestsp#h.x[end][1:p]
+_u = uest#sp#h.x[end][1:p]
 f_and_jac(fx, jac_prototype, vcat(_u, abs.(_u)))
 fx
 jac_prototype
 end
+
+jac_prototype[1,6]
+uest
 
 norm(uestsp - uest) / norm(uest)
 norm(uestsp - u) / norm(u)
@@ -87,5 +90,14 @@ norm(uestsp - u) / norm(u)
 includet("NLoptLassoData.jl")
 using .NLoptLassoData
 uestnl = run_once_nlopt(G, y, α)[2][1:p]
+
+grad = zeros(2p)
+NLoptLassoData.make_obj(G, y, α)(vcat(uestnl, abs.(uestnl)), grad)
+grad[2]
+
+uest
+
+NLoptLassoData.make_cons(p, Val(9))(vcat(uestnl, abs.(uestnl)), grad)
+repr(grad)
 
 norm(uestsp - uestnl) / norm(uestnl)
