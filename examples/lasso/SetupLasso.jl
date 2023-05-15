@@ -36,7 +36,7 @@ function lasso_epigraph(G, y, α)
         fx[2:end] .= vcat(u - t, -u - t)
         if jac !== nothing
             jac[1, :] .= vcat(2 * G' * (G * u - y), fill(α, p))
-            jac[2, :] .= ∇cons
+            jac[2:end, :] .= ∇cons
         end
         return nothing
     end
