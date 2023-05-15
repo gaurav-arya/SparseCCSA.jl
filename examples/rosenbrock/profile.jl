@@ -8,10 +8,15 @@ opt = init(f_and_jac, n, m, Float64, zeros(m+1, n);
             dual_ftol_abs=1e-15, dual_ftol_rel=1e-15
 ) 
 
+using BenchmarkTools
 import Profile
 @btime f_and_jac($(zeros(2)), $(zeros(m+1, n)), $(zeros(n))) # check rosenbrock f is efficient
 @btime step!(opt) # benchmark optimization step
-@profview for i in 1:10000 step!(opt) end # profile optimization step
+@profview for i in 1:100000 step!(opt) end # profile optimization step
+
+@report_opt step!(opt)
+
+
 
 
 

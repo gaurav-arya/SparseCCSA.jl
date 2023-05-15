@@ -47,7 +47,6 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
         dual_dual_evaluator(nothing, nothing, nothing) 
 
         Δx .= optimizer.cache.Δx
-
         return nothing
     end
 end
@@ -99,7 +98,7 @@ What are the invariants / contracts?
 - optimizer.dual_optimizer contains a ref to optimizer.cache, so updating latter implicitly updates the former. 
 """
 function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
-    @unpack f_and_jac, cache, dual_optimizer, stats, settings = optimizer
+    @unpack f_and_jac, cache, stats, settings = optimizer
 
     retcode = get_retcode(optimizer)
     (retcode != :CONTINUE) && return retcode
