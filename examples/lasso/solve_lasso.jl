@@ -5,8 +5,8 @@ using LinearAlgebra
 ## Initialize problem
 
 begin
-n = 4
-p = 8
+n = 2
+p = 2
 S = 2
 (;u, G, y) = setup_lasso(n, p, S)
 α = 1e-2
@@ -79,11 +79,8 @@ fx
 jac_prototype
 end
 
-jac_prototype[1,6]
-uest
-
-norm(uestsp - uest) / norm(uest)
 norm(uestsp - u) / norm(u)
+norm(uestsp - uest) / norm(uest)
 
 ## OK, time to try NLopt instead
 
@@ -91,8 +88,15 @@ includet("NLoptLassoData.jl")
 using .NLoptLassoData
 uestnl = run_once_nlopt(G, y, α)[2][1:p]
 
+uestnl
+uestsp
+uest
+u
+
 grad = zeros(2p)
 NLoptLassoData.make_obj(G, y, α)(vcat(uestnl, abs.(uestnl)), grad)
+uestnl
+uest
 grad[2]
 
 uest
