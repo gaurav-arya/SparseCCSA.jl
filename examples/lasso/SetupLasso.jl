@@ -1,6 +1,8 @@
 module SetupLasso
+__revise_mode__ = :eval
 
 using Random
+using Statistics
 
 # n, p = 20, 40
 # 
@@ -19,5 +21,9 @@ function setup_lasso(n, p)
     y = G * u
     y += 0.05 * mean(abs.(y)) * η
 
-    return u, G, y, α, β
+    return (;u, G, y)
+end
+
+export setup_lasso
+
 end
