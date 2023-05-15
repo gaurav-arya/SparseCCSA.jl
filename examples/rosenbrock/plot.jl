@@ -1,5 +1,5 @@
-include("SparseCCSAData.jl")
-include("NLoptData.jl")
+includet("SparseCCSAData.jl")
+includet("NLoptData.jl")
 using .SparseCCSAData
 using .NLoptData
 using LinearAlgebra

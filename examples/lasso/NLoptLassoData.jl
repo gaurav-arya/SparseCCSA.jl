@@ -1,39 +1,59 @@
-module NLoptData
+module NLoptLassoData
 __revise_mode__ = :eval
 
-include("DefineRosenbrock.jl")
-using .DefineRosenbrock
+include("SetupLasso.jl")
+using .SetupLasso
 using NLopt
-using ForwardDiff
 
-function obj(x, grad)
-    if length(grad) > 0
-        grad .= ForwardDiff.gradient(x -> f(x)[1], x)
+function make_obj(G, y, α) 
+    return (u_and_t, grad) -> begin
+        u = @view u_and_t[1:p]
+        t = @view u_and_t[(p + 1):(2p)]
+        if length(grad) > 0
+            grad .= vcat(2 * G' * (G * u - y), fill(α, p))
+        end
+        return sum((G * u - y) .^ 2) + α * sum(t)
     end
-    return f(x)[1]
 end
 
-function cons1(x, grad)
-    if length(grad) > 0
-        grad .= ForwardDiff.gradient(x -> f(x)[2], x)
+function make_cons(iv)
+    i = SparseCCSA._unwrap_val(iv)
+    return (u_and_t, grad) -> begin
+        u = @view u_and_t[1:p]
+        t = @view u_and_t[(p + 1):(2p)]
+        if length(grad) > 0
+            grad .= 0
+            if i <= p 
+                grad[i] = 1
+                grad[i + p] = -1
+            else
+                grad[i] = -1
+                grad[i + p] = -1
+            end
+        end
+        return (i <= p) ? u[i] - t[i] : -u[i] - t[i]
     end
-    return f(x)[2]
 end
 
-function run_once_nlopt(evals)
+function run_once_nlopt(G, y, α)
     nlopt = Opt(:LD_CCSAQ, 2)
-    nlopt.lower_bounds = [-1.0, -1.0]
-    nlopt.upper_bounds = [2.0, 2.0]
-    nlopt.maxeval = evals 
-    nlopt.xtol_rel = 0.0
-    nlopt.xtol_abs = 0.0
+    nlopt.lower_bounds = vcat(fill(-Inf, p), zeros(p)) 
+    nlopt.upper_bounds = fill(Inf, 2p)
+    nlopt.maxeval = 1000 
+    # nlopt.xtol_rel = 0.0
+    # nlopt.xtol_abs = 0.0
     nlopt.params["verbosity"] = 2
-    # nlopt.params["max_inner_iters"] = 1
 
-    nlopt.min_objective = obj 
-    inequality_constraint!(nlopt, cons1)
+    nlopt.min_objective = make_obj(G, y, α)
+    for i in 1:2p
+        inequality_constraint!(nlopt, make_cons(Val(i)))
+    end
 
-    (minf,minx,ret) = optimize(nlopt, [0.5, 0.5])
+    u0 = zeros(p)
+    t0 = 2 * abs.(u0) # start the t's with some slack
+    u0_and_t0 = vcat(u0, t0)
+
+    (minf,minx,ret) = optimize(nlopt, u0_and_t0)
     return minf,minx,ret
 end
 
@@ -63,7 +83,7 @@ end
     Requires use of custom nlopt binary: build from https://github.com/gaurav-arya/nlopt/tree/ag-debug,
     move shared object file to this directory, and set with set_binary.jl.
 """
-function nlopt_dataframe(evals) 
+function nlopt_lasso_data(evals) 
     open("nlopt_out.txt", "w") do io
         redirect_stdout(io) do
             run_once_nlopt(evals)
@@ -138,6 +158,6 @@ function nlopt_dataframe(evals)
     return d
 end
 
-export nlopt_dataframe
+export nlopt_lasso_data
 
 end
