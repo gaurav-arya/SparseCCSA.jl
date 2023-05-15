@@ -77,10 +77,13 @@ function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=noth
                                 settings = CCSASettings(; max_iters, max_inner_iters, ftol_abs, ftol_rel))
 
     # Initialize optimizer
-    x0 = (x0 === nothing) ? zeros(T, n) : copy(x0)
-    lb = (lb === nothing) ? fill(typemin(T), n) : lb 
-    ub = (ub === nothing) ? fill(typemax(T), n) : ub 
-    reinit!(optimizer; x0, lb, ub)
+    _x0 = zeros(T, n)
+    _lb = zeros(T, n)
+    _ub = zeros(T, n)
+    (_x0 !== nothing) && (_x0 .= x0)
+    (lb !== nothing) && (_lb .= lb)
+    (ub !== nothing) && (_ub .= ub)
+    reinit!(optimizer; x0=_x0, lb=_lb, ub=_ub)
 
     return optimizer
 end
