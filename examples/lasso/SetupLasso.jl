@@ -30,10 +30,8 @@ function lasso_epigraph(G, y, α)
     for i in 1:p
         ∇cons[i, i] = 1
         ∇cons[i, p + i] = -1
-    end
-    for i in (p+1):2p
-        ∇cons[i, i-p] = -1
-        ∇cons[i, i] = -1
+        ∇cons[i + p, i] = -1
+        ∇cons[i + p, i + p] = -1
     end
     f_and_jac = (fx, jac, u_and_t) -> begin
         u = @view u_and_t[1:p]
