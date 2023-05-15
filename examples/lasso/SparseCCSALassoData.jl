@@ -9,7 +9,7 @@ function sparseccsa_lasso_data(G, y, α)
     n, p = size(G)
     
     (;f_and_jac, jac_prototype) = lasso_epigraph(G, y, α)
-    u0 = rand(p)
+    u0 = zeros(p)
     t0 = 2 * abs.(u0) # start the t's with some slack
     u0_and_t0 = vcat(u0, t0)
 

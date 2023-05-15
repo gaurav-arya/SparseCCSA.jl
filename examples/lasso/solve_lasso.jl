@@ -31,14 +31,58 @@ begin
 h = sparseccsa_lasso_data(G, y, α)
 ih = h.inner_history[1]
 uestsp = h.x[end][1:p]
+sum(uestsp)
+end
+
+begin
+f = Figure(resolution=(1200, 800))
+ax1 = Axis(f[1,1], xlabel="Iterations", ylabel="value")
+ax2 = Axis(f[1,2], xlabel="Iterations", ylabel="log(value)", yscale=log10)
+ax3 = Axis(f[2,1], xlabel="Iterations", ylabel="log(value)", yscale=log10)
+ax4 = Axis(f[2,2], xlabel="Iterations", ylabel="number")
+ax5 = Axis(f[1,3], xlabel="Iterations", ylabel="value")
+# objective
+lines!(ax1, (a -> a[1]).(h.fx), label="fx[1] (objective)")
+lines!(ax1, (a -> a[2]).(h.fx), label="fx[2] (constraint 1)")
+lines!(ax1, (a -> a[3]).(h.fx), label="fx[3] (constraint 2)")
+# ρ
+lines!(ax2, (a -> a[1]).(h.ρ), label="ρ[1]")
+lines!(ax2, (a -> a[2]).(h.ρ), label="ρ[2]")
+lines!(ax2, (a -> a[p+1]).(h.ρ), label="ρ[p+1]")
+# σ
+lines!(ax3, (a -> a[1]).(h.σ), label="σ[1]")
+lines!(ax3, (a -> a[2]).(h.σ), label="σ[2]")
+lines!(ax3, (a -> a[p+1]).(h.σ), label="σ[p+1]")
+# dual iterations
+lines!(ax4, Base.Fix2(size, 1).(h.inner_history), label="inner iterations")
+lines!(ax4, (ih -> sum(i -> i.dual_iters, ih.dual_info)).(h.inner_history), label="total dual iterations")
+# u/t values 
+lines!(ax5, (a -> a[1]).(h.x), label="u[1]") 
+lines!(ax5, (a -> a[p+1]).(h.x), label="t[1]")    
+lines!(ax5, (a -> a[2]).(h.x), label="u[2]") 
+lines!(ax5, (a -> a[p+2]).(h.x), label="t[2]")    
+# legends
+axislegend(ax1; position=:rt)
+axislegend(ax2; position=:rt)
+axislegend(ax3; position=:rt)
+axislegend(ax4; position=:rt)
+axislegend(ax5; position=:rt)
+f
 end
 
 h[1, :].ρ
 h.inner_history[1].ρ[1]
 
-h.inner_history[1].dual_info[1]
+h.x[end]
+h.fx[end]
 
-h.inner_history[1].dual_history[1] # this is a problem!
+h.fx[64][1]
+lines((a -> a[7]).(h.x))
+
+
+h.ρ
+
+h.inner_history[end].dual_info[1].dual_history 
 
 norm(uestsp - uest) / norm(uest)
 norm(uestsp - u) / norm(u)
