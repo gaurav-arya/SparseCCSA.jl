@@ -1,5 +1,5 @@
-include("NLoptData.jl")
-using .NLoptData
+include("NLoptRosenbrockData.jl")
+using .NLoptRosenbrockData
 using JLD2
 
 df_n = nlopt_dataframe(1000)

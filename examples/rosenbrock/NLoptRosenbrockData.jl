@@ -1,4 +1,4 @@
-module NLoptData
+module NLoptRosenbrockData
 __revise_mode__ = :eval
 
 include("DefineRosenbrock.jl")

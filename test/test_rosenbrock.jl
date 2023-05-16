@@ -1,5 +1,5 @@
-include("../examples/rosenbrock/SparseCCSAData.jl")
-using .SparseCCSAData
+include("../examples/rosenbrock/SparseCCSARosenbrockData.jl")
+using .SparseCCSARosenbrockData
 using Test
 using JLD2
 using DataFrames

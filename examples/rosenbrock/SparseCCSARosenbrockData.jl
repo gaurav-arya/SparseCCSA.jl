@@ -1,4 +1,4 @@
-module SparseCCSAData
+module SparseCCSARosenbrockData
 __revise_mode__ = :eval
 
 include("DefineRosenbrock.jl")
