@@ -79,10 +79,13 @@ function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=noth
                                                         ftol_abs, ftol_rel, xtol_abs, xtol_rel))
 
     # Initialize optimizer
-    x0 = (x0 === nothing) ? zeros(T, n) : copy(x0)
-    lb = (lb === nothing) ? fill(typemin(T), n) : lb 
-    ub = (ub === nothing) ? fill(typemax(T), n) : ub 
-    reinit!(optimizer; x0, lb, ub)
+    _x0 = zeros(T, n)
+    _lb = zeros(T, n)
+    _ub = zeros(T, n)
+    (_x0 !== nothing) && (_x0 .= x0)
+    (lb !== nothing) && (_lb .= lb)
+    (ub !== nothing) && (_ub .= ub)
+    reinit!(optimizer; x0=_x0, lb=_lb, ub=_ub)
 
     return optimizer
 end
@@ -105,7 +108,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
     retcode = get_retcode(optimizer)
     (retcode != :CONTINUE) && return retcode
 
-    if optimizer.stats.outer_iters_done > 0
+    if stats.outer_iters_done > 0
         # Push new x into storage of previous x's
         cache.x_prevprev .= cache.x_prev
         cache.x_prev .= cache.x
@@ -114,7 +117,8 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
     end
 
     # Solve the dual problem, searching for a conservative solution. 
-    inner_history = _unwrap_val(verbosity) > 1 ? DataFrame() : nothing
+    stats.inner_iters_cur_done = 0
+    inner_history = _unwrap_val(verbosity) > 0 ? DataFrame() : nothing
     while true 
         dual_sol = propose_Δx!(cache.Δx_proposed, optimizer; verbosity)
 
@@ -131,20 +135,28 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
         conservative = true 
         for i in eachindex(cache.ρ)
             approx_error = cache.gx_proposed[i] - cache.fx_proposed[i]
-            conservative &= (approx_error >= 0)
-            if approx_error < 0
+            conservative_i = (approx_error >= -1e-10)
+            conservative &= conservative_i
+            if !conservative_i 
                 cache.ρ[i] = min(10.0 * cache.ρ[i], 1.1 * (cache.ρ[i] - approx_error / w))
             end
         end
 
-        if _unwrap_val(verbosity) > 1
-            push!(inner_history, (;dual_iters=dual_sol.stats.outer_iters_done, dual_obj=-dual_sol.fx[1], 
-                                   dual_opt=dual_sol.x[1], 
-                                   ρ=copy(cache.ρ), 
+        if _unwrap_val(verbosity) > 0
+            dual_info = if dual_sol !== nothing
+                (;dual_iters=dual_sol.stats.outer_iters_done, dual_obj=-dual_sol.fx[1], 
+                  dual_opt=dual_sol.x[1], 
+                  dual_history=dual_sol.stats.history)
+            else
+                nothing
+            end
+            push!(inner_history, (;ρ=copy(cache.ρ), 
                                    x_proposed=copy(cache.x_proposed),
                                    Δx_proposed=copy(cache.Δx_proposed),
-                                   conservative=cache.gx_proposed .> cache.fx_proposed,
-            ))
+                                   conservative=cache.gx_proposed .>= (cache.fx_proposed .- 1e-10),
+                                   fx_proposed=copy(cache.fx_proposed),
+                                   gx_proposed=copy(cache.gx_proposed),
+                                   dual_info))
         end
 
         # We are guaranteed to have a better optimum once we find a conservative approximation.
@@ -154,13 +166,15 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
         feasible = all(<=(0), @view cache.fx_proposed[2:end])
         better_opt = cache.fx_proposed[1] < cache.fx[1]
         inner_done = conservative || (stats.inner_iters_cur_done == settings.max_inner_iters) 
-        if feasible && (better_opt || inner_done)
+        # Make sure to always update if inner_done, even if (inner_done && !feasible) somehow holds due to
+        # floating point shenanigans.
+        if (feasible && better_opt) || inner_done
             # Update cache
             cache.x .= cache.x_proposed
             cache.fx .= cache.fx_proposed
             cache.jac_fx .= cache.jac_fx_proposed
         end
-
+        
         stats.inner_iters_cur_done += 1
         stats.inner_iters_done += 1
 
@@ -168,11 +182,11 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
         inner_done && break
     end
 
-    optimizer.stats.outer_iters_done += 1
+    stats.outer_iters_done += 1
 
     # Update σ based on monotonicity of changes
     # only do this after the first iteration, similar to nlopt, since this should be a nullop after first update
-    if optimizer.stats.outer_iters_done > 1
+    if stats.outer_iters_done > 1
         for i in eachindex(cache.σ)
             Δx2 = (cache.x[i] - cache.x_prev[i]) * (cache.x_prev[i] - cache.x_prevprev[i])
             scaled = (Δx2 < 0 ? 0.7 : (Δx2 > 0 ? 1.2 : 1)) * cache.σ[i]
@@ -186,10 +200,10 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
     end
 
     # Reduce ρ (be less conservative)
-    @. cache.ρ = max(cache.ρ / 10, 1e-5)
+    @. cache.ρ = max(cache.ρ / 10, 1e-3)
 
     if _unwrap_val(verbosity) > 0
-        push!(stats.history, (;ρ=copy(cache.ρ), σ=copy(cache.σ), x=copy(cache.x), fx=copy(cache.fx), inner_history))
+        push!(stats.history, (;ρ=copy(cache.ρ), σ=copy(cache.σ), x=copy(cache.x), fx=copy(cache.fx), inner_iters_done=stats.inner_iters_done, inner_history))
     end
 
     return retcode

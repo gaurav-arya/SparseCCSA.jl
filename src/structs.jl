@@ -80,6 +80,8 @@ end
 function reset!(stats::CCSAStats)
     stats.outer_iters_done = 0
     stats.inner_iters_done = 0
+    stats.inner_iters_cur_done = 0
+    stats.history = DataFrame()
 end
 
 """
