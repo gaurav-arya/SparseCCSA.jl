@@ -5,8 +5,8 @@ using LinearAlgebra
 ## Initialize problem
 
 begin
-n = 2
-p = 2
+n = 8
+p = 10
 S = 2
 (;u, G, y) = setup_lasso(n, p, S)
 α = 1e-2
@@ -17,7 +17,7 @@ end
 
 begin
 using ImplicitAdjoints
-uest, info = genlasso(G, y, α, β, 10000, 1e-16, L1(p))
+uest, info = genlasso(G, y, α, β, 1000000, 1e-44, L1(p))
 norm(uest - u) / norm(u)
 end
 
@@ -79,24 +79,34 @@ fx
 jac_prototype
 end
 
-norm(uestsp - u) / norm(u)
+norm(uestnl - uest) / norm(uest)
 norm(uestsp - uest) / norm(uest)
 
 ## OK, time to try NLopt instead
 
 includet("NLoptLassoData.jl")
 using .NLoptLassoData
-uestnl = run_once_nlopt(G, y, α)[2][1:p]
+begin
+sol = run_once_nlopt(G, y, α)
+uestnl = sol[2][1:p]
+norm(uestnl - uest) / norm(uest)
+end
+sol
 
-uestnl
 uestsp
 uest
-u
 
+begin
 grad = zeros(2p)
-NLoptLassoData.make_obj(G, y, α)(vcat(uestnl, abs.(uestnl)), grad)
+NLoptLassoData.make_obj(G, y, α)(vcat(uest, abs.(uest)), grad)
+gradnl = zeros(2p)
+NLoptLassoData.make_obj(G, y, α)(vcat(uestnl, abs.(uestnl)), gradnl)
+end
+
+repr(grad)
+repr(gradnl)
+repr(uest)
 uestnl
-uest
 grad[2]
 
 uest

@@ -20,11 +20,10 @@ function setup_lasso(n, p, S)
     return (;u, G, y)
 end
 
-# TODO: support β
 """
 Return the f_and_jac function for Lasso's epigraph formulation.
 """
-function lasso_epigraph(G, y, α)
+function lasso_epigraph(G, y, α, β)
     n, p = size(G)
     ∇cons = spzeros(2p, 2p) 
     for i in 1:p
@@ -36,10 +35,10 @@ function lasso_epigraph(G, y, α)
     f_and_jac = (fx, jac, u_and_t) -> begin
         u = @view u_and_t[1:p]
         t = @view u_and_t[(p + 1):(2p)]
-        fx[1] = sum((G * u - y) .^ 2) + α * sum(t)
+        fx[1] = sum((G * u - y) .^ 2) + α * sum(t) + β * sum(abs2.(u))
         fx[2:end] .= vcat(u - t, -u - t)
         if jac !== nothing
-            jac[1, :] .= vcat(2 * G' * (G * u - y), fill(α, p))
+            jac[1, :] .= vcat(2 * G' * (G * u - y) + β * u, fill(α, p))
             jac[2:end, :] .= ∇cons
         end
         return nothing

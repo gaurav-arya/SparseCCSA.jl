@@ -16,11 +16,8 @@ function sparseccsa_lasso_data(G, y, α)
     opt = init(f_and_jac, 2p, 2p, Float64, jac_prototype;
                 lb=vcat(fill(-Inf, p), zeros(p)), ub=Inf,
                 x0 = u0_and_t0, 
-                max_iters = 1000,
-                max_inner_iters=1000,
-                dual_ftol_rel=1e-14
-                # max_dual_iters=200,
-                # max_dual_inner_iters=5
+                max_iters = 10000,
+                dual_xtol_rel=1e-8,
     ) 
     sol = solve!(opt; verbosity=Val(2))
     return opt.stats.history

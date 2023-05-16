@@ -135,8 +135,9 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
         conservative = true 
         for i in eachindex(cache.ρ)
             approx_error = cache.gx_proposed[i] - cache.fx_proposed[i]
-            conservative &= (approx_error >= 0)
-            if approx_error < 0
+            conservative_i = approx_error >= -1e10
+            conservative &= conservative_i
+            if !conservative_i 
                 cache.ρ[i] = min(10.0 * cache.ρ[i], 1.1 * (cache.ρ[i] - approx_error / w))
             end
         end
@@ -197,7 +198,8 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
     end
 
     # Reduce ρ (be less conservative)
-    @. cache.ρ = max(cache.ρ / 10, 1e-5)
+    @. cache.ρ = max(cache.ρ / 10, 1e-3)
+    @. cache.ρ[2:end] .= 0
 
     if _unwrap_val(verbosity) > 0
         push!(stats.history, (;ρ=copy(cache.ρ), σ=copy(cache.σ), x=copy(cache.x), fx=copy(cache.fx), inner_history))

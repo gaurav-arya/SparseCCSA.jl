@@ -43,10 +43,12 @@ function run_once_nlopt(G, y, α)
     nlopt = Opt(:LD_CCSAQ, 2p)
     nlopt.lower_bounds = vcat(fill(-Inf, p), zeros(p)) 
     nlopt.upper_bounds = fill(Inf, 2p)
-    nlopt.maxeval = 1000 
-    nlopt.xtol_rel = 0.0
+    nlopt.maxeval = 10000 
+    nlopt.xtol_rel = 1e-6
     nlopt.xtol_abs = 0.0
-    nlopt.params["verbosity"] = 2
+    nlopt.params["dual_ftol_rel"] = 0.0 # this is crucial! the default 1e-14... not good enough
+    nlopt.params["dual_xtol_rel"] = 1e-12
+    nlopt.params["verbosity"] = 0
 
     nlopt.min_objective = make_obj(G, y, α)
     for i in 1:2p
@@ -54,7 +56,7 @@ function run_once_nlopt(G, y, α)
     end
 
     u0 = zeros(p)
-    t0 = 2 * abs.(u0) # start the t's with some slack
+    t0 = abs.(u0) # start the t's with some slack
     u0_and_t0 = vcat(u0, t0)
 
     (minf,minx,ret) = optimize(nlopt, u0_and_t0)
