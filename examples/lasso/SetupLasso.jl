@@ -15,7 +15,7 @@ function setup_lasso(n, p, S)
     u[randperm(rng, p)[1:S]] .= randn(S)
     η = randn(rng, n)
     y = G * u
-    y += 0.05 * mean(abs.(y)) * η
+    # y += 0.05 * mean(abs.(y)) * η
 
     return (;u, G, y)
 end
@@ -46,6 +46,39 @@ function lasso_epigraph(G, y, α, β)
     return (;f_and_jac, jac_prototype = vcat(ones(2 * p)', ∇cons))
 end
 
-export setup_lasso, lasso_epigraph
+# for NLopt
+function make_obj(G, y, α, β) 
+    n, p = size(G)
+    return (u_and_t, grad) -> begin
+        u = @view u_and_t[1:p]
+        t = @view u_and_t[(p + 1):(2p)]
+        if length(grad) > 0
+            grad .= vcat(2 * G' * (G * u - y) + β * u, fill(α, p))
+        end
+        return sum((G * u - y) .^ 2) + α * sum(t) + β * sum(abs2.(u))
+    end
+end
+
+_unwrap_val(::Val{x}) where x = x
+function make_cons(p, iv)
+    i = _unwrap_val(iv)
+    return (u_and_t, grad) -> begin
+        u = @view u_and_t[1:p]
+        t = @view u_and_t[(p + 1):(2p)]
+        if length(grad) > 0
+            grad .= 0
+            if i <= p 
+                grad[i] = 1
+                grad[i + p] = -1
+            else
+                grad[i - p] = -1
+                grad[i] = -1
+            end
+        end
+        return (i <= p) ? u[i] - t[i] : -u[i - p] - t[i - p]
+    end
+end
+
+export setup_lasso, lasso_epigraph, make_obj, make_cons
 
 end

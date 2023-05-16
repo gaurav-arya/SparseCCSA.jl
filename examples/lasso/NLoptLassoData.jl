@@ -5,55 +5,26 @@ include("SetupLasso.jl")
 using .SetupLasso
 using NLopt
 
-function make_obj(G, y, α) 
-    n, p = size(G)
-    return (u_and_t, grad) -> begin
-        u = @view u_and_t[1:p]
-        t = @view u_and_t[(p + 1):(2p)]
-        if length(grad) > 0
-            grad .= vcat(2 * G' * (G * u - y), fill(α, p))
-        end
-        return sum((G * u - y) .^ 2) + α * sum(t)
-    end
-end
-
-_unwrap_val(::Val{x}) where x = x
-function make_cons(p, iv)
-    i = _unwrap_val(iv)
-    return (u_and_t, grad) -> begin
-        u = @view u_and_t[1:p]
-        t = @view u_and_t[(p + 1):(2p)]
-        if length(grad) > 0
-            grad .= 0
-            if i <= p 
-                grad[i] = 1
-                grad[i + p] = -1
-            else
-                grad[i - p] = -1
-                grad[i] = -1
-            end
-        end
-        return (i <= p) ? u[i] - t[i] : -u[i - p] - t[i - p]
-    end
-end
-
-function run_once_nlopt(G, y, α)
+function run_once_nlopt(G, y, α, β)
     n, p = size(G)
 
     nlopt = Opt(:LD_CCSAQ, 2p)
     nlopt.lower_bounds = vcat(fill(-Inf, p), zeros(p)) 
     nlopt.upper_bounds = fill(Inf, 2p)
-    nlopt.maxeval = 10000 
-    nlopt.xtol_rel = 1e-6
-    nlopt.xtol_abs = 0.0
-    nlopt.params["dual_ftol_rel"] = 0.0 # this is crucial! the default 1e-14... not good enough
-    nlopt.params["dual_xtol_rel"] = 1e-12
+    # nlopt.maxeval = 2000
+    nlopt.xtol_rel = 1e-8
+    # nlopt.ftol_rel = 0.0
+    # nlopt.xtol_abs = 0.0
+    # nlopt.ftol_abs = 0.0
+    nlopt.params["dual_ftol_rel"] = 1e-14 # this is crucial! the default 1e-14... not good enough
+    # nlopt.params["dual_xtol_rel"] = 
+    # nlopt.params["dual_max_eval"] = 100000
     nlopt.params["verbosity"] = 0
 
-    nlopt.min_objective = make_obj(G, y, α)
-    for i in 1:2p
-        inequality_constraint!(nlopt, make_cons(p, Val(i)))
-    end
+    nlopt.min_objective = SetupLasso.make_obj(G, y, α, β)
+    # for i in 1:2p
+    #     inequality_constraint!(nlopt, make_cons(p, Val(i)), 1e-10)
+    # end
 
     u0 = zeros(p)
     t0 = abs.(u0) # start the t's with some slack
