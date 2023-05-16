@@ -12,7 +12,7 @@ function run_once_nlopt(G, y, α, β)
     nlopt.lower_bounds = vcat(fill(-Inf, p), zeros(p)) 
     nlopt.upper_bounds = fill(Inf, 2p)
     # nlopt.maxeval = 2000
-    nlopt.xtol_rel = 1e-8
+    nlopt.xtol_rel = 1e-6
     # nlopt.ftol_rel = 0.0
     # nlopt.xtol_abs = 0.0
     # nlopt.ftol_abs = 0.0
@@ -22,9 +22,9 @@ function run_once_nlopt(G, y, α, β)
     nlopt.params["verbosity"] = 0
 
     nlopt.min_objective = SetupLasso.make_obj(G, y, α, β)
-    # for i in 1:2p
-    #     inequality_constraint!(nlopt, make_cons(p, Val(i)), 1e-10)
-    # end
+    for i in 1:2p
+        inequality_constraint!(nlopt, make_cons(p, Val(i)), 1e-10) # this is helpful for convergence. needs to be tuned well: higher and lower can both be bad.
+    end
 
     u0 = zeros(p)
     t0 = abs.(u0) # start the t's with some slack

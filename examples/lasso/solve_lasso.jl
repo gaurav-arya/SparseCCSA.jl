@@ -6,11 +6,11 @@ using LinearAlgebra
 
 begin
 n = 8
-p = 10
+p = 8
 S = 2
 (;u, G, y) = setup_lasso(n, p, S)
-α = 1e-2
-β = 0.0
+α = 0.0#1e-2
+β = 1e-5#0.0
 end
 
 ## Solve problem with FISTA
@@ -21,20 +21,28 @@ uest, info = genlasso(G, y, α, β, 1000000, 1e-44, L1(p))
 norm(uest - u) / norm(u)
 end
 
+uest_qr = (G'G + β * I) \ G'y
+norm(uest - uest_qr) / norm(uest_qr)
+
 ## Solve problem with CCSA
 
 includet("SparseCCSALassoData.jl")
 using .SparseCCSALassoData
-using CairoMakie
 
 begin
-h = sparseccsa_lasso_data(G, y, α)
+h = sparseccsa_lasso_data(G, y, α, β)
 ih = h.inner_history[1]
 uestsp = h.x[end][1:p]
-sum(uestsp)
+norm(uestsp - uest) / norm(uest)
 end
+uestsp
+uest
+
+h.inner_history[1].gx_proposed
+h.inner_history[1].fx_proposed
 
 begin
+using CairoMakie
 f = Figure(resolution=(1200, 800))
 ax1 = Axis(f[1,1], xlabel="Iterations", ylabel="log(value)", yscale=log10)
 ax2 = Axis(f[1,2], xlabel="Iterations", ylabel="log(value)", yscale=log10)
@@ -87,11 +95,21 @@ norm(uestsp - uest) / norm(uest)
 includet("NLoptLassoData.jl")
 using .NLoptLassoData
 begin
-sol = run_once_nlopt(G, y, α)
+sol = run_once_nlopt(G, y, α, β)
 uestnl = sol[2][1:p]
-norm(uestnl - uest) / norm(uest)
+norm(uestnl - uest_qr) / norm(uest_qr)
 end
-sol
+
+sol[1]
+
+# evaluate objective on QR soln
+begin
+grad = zeros(2p)
+make_obj(G, y, α, β)(vcat(uest_qr, abs.(uest_qr)), grad)
+# make_obj(G, y, α, β)(vcat(uestnl, abs.(uestnl)), grad)
+# gradnl = zeros(2p)
+# NLoptLassoData.make_obj(G, y, α)(vcat(uestnl, abs.(uestnl)), gradnl)
+end
 
 uestsp
 uest
