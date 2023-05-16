@@ -201,7 +201,6 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
 
     # Reduce ρ (be less conservative)
     @. cache.ρ = max(cache.ρ / 10, 1e-3)
-    # @. cache.ρ[2:end] .= 0
 
     if _unwrap_val(verbosity) > 0
         push!(stats.history, (;ρ=copy(cache.ρ), σ=copy(cache.σ), x=copy(cache.x), fx=copy(cache.fx), inner_iters_done=stats.inner_iters_done, inner_history))
