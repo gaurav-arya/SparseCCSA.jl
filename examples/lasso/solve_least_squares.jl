@@ -32,11 +32,20 @@ includet("SparseCCSALassoData.jl")
 using .SparseCCSALassoData
 
 begin
-h = sparseccsa_lasso_data(G, y, α, β)
+h, opt = sparseccsa_lasso_data(G, y, α, β)
 ih = h.inner_history[1]
 uestsp = h.x[end][1:p]
-norm(uestsp - uest) / norm(uest)
+norm(uestsp - uest_qr) / norm(uest_qr)
 end
+
+opt.cache.x
+opt.cache.x_prev
+
+h.x[end] - h.x[end-1]
+h.inner_history[end].Δx_proposed[end] + h.x[end-1]
+h.x[end] ==h.x[end-1]
+
+h[(end-1):end, :]
 
 ## OK, time to try NLopt instead
 
