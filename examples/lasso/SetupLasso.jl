@@ -15,7 +15,7 @@ function setup_lasso(n, p, S)
     u[randperm(rng, p)[1:S]] .= randn(S)
     η = randn(rng, n)
     y = G * u
-    # y += 0.05 * mean(abs.(y)) * η
+    y += 0.01 * mean(abs.(y)) * η
 
     return (;u, G, y)
 end
