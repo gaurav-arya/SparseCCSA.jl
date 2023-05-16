@@ -166,13 +166,15 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
         feasible = all(<=(0), @view cache.fx_proposed[2:end])
         better_opt = cache.fx_proposed[1] < cache.fx[1]
         inner_done = conservative || (stats.inner_iters_cur_done == settings.max_inner_iters) 
-        if feasible && (better_opt || inner_done)
+        # Make sure to always update if inner_done, even if (inner_done && !feasible) somehow holds due to
+        # floating point shenanigans.
+        if (feasible && better_opt) || inner_done
             # Update cache
             cache.x .= cache.x_proposed
             cache.fx .= cache.fx_proposed
             cache.jac_fx .= cache.jac_fx_proposed
         end
-
+        
         stats.inner_iters_cur_done += 1
         stats.inner_iters_done += 1
 

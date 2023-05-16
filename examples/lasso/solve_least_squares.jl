@@ -57,26 +57,3 @@ grad = zeros(2p)
 # gradnl = zeros(2p)
 # NLoptLassoData.make_obj(G, y, α)(vcat(uestnl, abs.(uestnl)), gradnl)
 end
-
-uestsp
-uest
-
-begin
-grad = zeros(2p)
-NLoptLassoData.make_obj(G, y, α)(vcat(uest, abs.(uest)), grad)
-gradnl = zeros(2p)
-NLoptLassoData.make_obj(G, y, α)(vcat(uestnl, abs.(uestnl)), gradnl)
-end
-
-repr(grad)
-repr(gradnl)
-repr(uest)
-uestnl
-grad[2]
-
-uest
-
-NLoptLassoData.make_cons(p, Val(9))(vcat(uestnl, abs.(uestnl)), grad)
-repr(grad)
-
-norm(uestsp - uestnl) / norm(uestnl)

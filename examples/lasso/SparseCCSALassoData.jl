@@ -25,7 +25,7 @@ function sparseccsa_lasso_data(G, y, α, β)
                 dual_ftol_rel=1e-14,
     ) 
     sol = solve!(opt; verbosity=Val(2))
-    return opt.stats.history
+    return opt.stats.history, opt
 end
 
 export sparseccsa_lasso_data
