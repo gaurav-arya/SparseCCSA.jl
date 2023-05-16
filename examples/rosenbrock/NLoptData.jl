@@ -28,7 +28,6 @@ function run_once_nlopt(evals)
     nlopt.xtol_rel = 0.0
     nlopt.xtol_abs = 0.0
     nlopt.params["verbosity"] = 2
-    # nlopt.params["max_inner_iters"] = 1
 
     nlopt.min_objective = obj 
     inequality_constraint!(nlopt, cons1)
