@@ -8,7 +8,8 @@ begin
 n = 8
 p = 8
 S = 2
-(;u, G, y) = setup_lasso(n, p, S)
+noise_level = 0.01
+(;u, G, y) = setup_lasso(n, p, S, noise_level)
 α = 1e-2
 β = 0.0
 end
@@ -27,14 +28,44 @@ includet("SparseCCSALassoData.jl")
 using .SparseCCSALassoData
 
 begin
-h, opt = sparseccsa_lasso_data(G, y, α, β; xtol_rel=1e-5, dual_ftol_rel=1e-10)
+h, opt = sparseccsa_lasso_data(G, y, α, β; xtol_rel=1e-11, dual_ftol_rel=1e-10)
 ih = h.inner_history[1]
 uestsp = h.x[end][1:p]
 norm(uestsp - uest) / norm(uest)
 end
 
-h.inner_history[1].gx_proposed
-h.inner_history[1].fx_proposed
+## OK, time to try NLopt instead
+
+includet("NLoptLassoData.jl")
+using .NLoptLassoData
+begin
+sol = run_once_nlopt(G, y, α, β)
+uestnl = sol[2][1:p]
+norm(uestnl - uest_qr) / norm(uest_qr)
+end
+
+sol[1]
+
+# evaluate objective on QR soln
+begin
+grad = zeros(2p)
+make_obj(G, y, α, β)(vcat(uest_qr, abs.(uest_qr)), grad)
+# make_obj(G, y, α, β)(vcat(uestnl, abs.(uestnl)), grad)
+# gradnl = zeros(2p)
+# NLoptLassoData.make_obj(G, y, α)(vcat(uestnl, abs.(uestnl)), gradnl)
+end
+
+uestsp
+uest
+
+begin
+grad = zeros(2p)
+NLoptLassoData.make_obj(G, y, α)(vcat(uest, abs.(uest)), grad)
+gradnl = zeros(2p)
+NLoptLassoData.make_obj(G, y, α)(vcat(uestnl, abs.(uestnl)), gradnl)
+end
+
+## Plotting
 
 begin
 using CairoMakie
@@ -84,47 +115,3 @@ end
 
 norm(uestnl - uest) / norm(uest)
 norm(uestsp - uest) / norm(uest)
-
-## OK, time to try NLopt instead
-
-includet("NLoptLassoData.jl")
-using .NLoptLassoData
-begin
-sol = run_once_nlopt(G, y, α, β)
-uestnl = sol[2][1:p]
-norm(uestnl - uest_qr) / norm(uest_qr)
-end
-
-sol[1]
-
-# evaluate objective on QR soln
-begin
-grad = zeros(2p)
-make_obj(G, y, α, β)(vcat(uest_qr, abs.(uest_qr)), grad)
-# make_obj(G, y, α, β)(vcat(uestnl, abs.(uestnl)), grad)
-# gradnl = zeros(2p)
-# NLoptLassoData.make_obj(G, y, α)(vcat(uestnl, abs.(uestnl)), gradnl)
-end
-
-uestsp
-uest
-
-begin
-grad = zeros(2p)
-NLoptLassoData.make_obj(G, y, α)(vcat(uest, abs.(uest)), grad)
-gradnl = zeros(2p)
-NLoptLassoData.make_obj(G, y, α)(vcat(uestnl, abs.(uestnl)), gradnl)
-end
-
-repr(grad)
-repr(gradnl)
-repr(uest)
-uestnl
-grad[2]
-
-uest
-
-NLoptLassoData.make_cons(p, Val(9))(vcat(uestnl, abs.(uestnl)), grad)
-repr(grad)
-
-norm(uestsp - uestnl) / norm(uestnl)
