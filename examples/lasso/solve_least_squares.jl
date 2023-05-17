@@ -19,7 +19,7 @@ end
 includet("FISTASolver.jl")
 using .FISTASolver
 begin
-uest, info = (G, y, α, β, 1000000, 1e-44, L1(p))
+uest, info = fista(G, y, α, β, 1000000, 1e-44, L1(p))
 norm(uest - u) / norm(u)
 end
 
