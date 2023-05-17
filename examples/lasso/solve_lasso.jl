@@ -5,7 +5,7 @@ using LinearAlgebra
 ## Initialize problem
 
 begin
-n = 8
+n = 4
 p = 8
 S = 2
 noise_level = 0.01
@@ -41,10 +41,8 @@ using .NLoptLassoData
 begin
 sol = run_once_nlopt(G, y, α, β)
 uestnl = sol[2][1:p]
-norm(uestnl - uest_qr) / norm(uest_qr)
+norm(uestnl - uest) / norm(uest)
 end
-
-sol[1]
 
 # evaluate objective on QR soln
 begin

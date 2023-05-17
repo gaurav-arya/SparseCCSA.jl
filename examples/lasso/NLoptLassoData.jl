@@ -16,7 +16,7 @@ function run_once_nlopt(G, y, α, β)
     # nlopt.ftol_rel = 0.0
     # nlopt.xtol_abs = 0.0
     # nlopt.ftol_abs = 0.0
-    nlopt.params["dual_ftol_rel"] = 1e-14 # this is crucial! the default 1e-14... not good enough
+    nlopt.params["dual_ftol_rel"] = 1e-12 # this is crucial! the default 1e-14... not good enough
     # nlopt.params["dual_xtol_rel"] = 
     # nlopt.params["dual_max_eval"] = 100000
     nlopt.params["verbosity"] = 0

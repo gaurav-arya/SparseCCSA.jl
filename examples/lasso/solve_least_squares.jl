@@ -8,9 +8,10 @@ begin
 n = 8
 p = 8
 S = 2
-(;u, G, y) = setup_lasso(n, p, S)
+noise_level = 0.0
+(;u, G, y) = setup_lasso(n, p, S, noise_level)
 α = 0.0#1e-2
-β = 1e-2#0.0
+β = 1e-5#0.0
 end
 
 ## Solve problem with FISTA
