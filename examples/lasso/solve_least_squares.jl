@@ -11,7 +11,7 @@ S = 2
 noise_level = 0.0
 (;u, G, y) = setup_lasso(n, p, S, noise_level)
 α = 0.0#1e-2
-β = 1e-5#0.0
+β = 1e-1#0.0
 end
 
 ## Solve problem with FISTA
@@ -34,10 +34,11 @@ includet("SparseCCSALassoData.jl")
 using .SparseCCSALassoData
 
 begin
-h, opt = sparseccsa_lasso_data(G, y, α, β; xtol_rel=1e-8, dual_ftol_rel=1e-12)
+h, opt = sparseccsa_lasso_data(G, y, α, β; xtol_rel=1e-10, dual_ftol_rel=1e-10)
 ih = h.inner_history[1]
 uestsp = h.x[end][1:p]
-norm(uestsp - uest_qr) / norm(uest_qr) # note: we can get better convergence with no noise.
+@show norm(uestsp - uest_qr) / norm(uest_qr) # note: we can get better convergence with no noise.
+@show opt.stats.inner_iters_done
 end
 
 ## OK, time to try NLopt instead

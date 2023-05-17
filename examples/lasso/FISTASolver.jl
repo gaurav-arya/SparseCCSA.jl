@@ -38,6 +38,7 @@ function fista(A, y, α, β, iters, tol, reg::Regularizer, xstart)
     xupdates = Float64[] 
     convdists = Float64[]
     evals = Float64[]
+    history = []
 
     Ψ = transform_op(reg)
     Fold = Inf
@@ -62,6 +63,7 @@ function fista(A, y, α, β, iters, tol, reg::Regularizer, xstart)
 
         xupdate = norm(z .- xold) / norm(xold)
         append!(xupdates, xupdate)
+        push!(history, copy(x))
 
         if xupdate < tol
             iters_done = i
@@ -69,7 +71,7 @@ function fista(A, y, α, β, iters, tol, reg::Regularizer, xstart)
         end
     end
 
-    x, (;iters=iters_done, final_tol=norm(x .- xold) / norm(x), xupdates) 
+    x, (;iters=iters_done, final_tol=norm(x .- xold) / norm(x), xupdates, history) 
 end
 
 ## regularizer implementations

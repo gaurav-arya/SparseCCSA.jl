@@ -74,12 +74,16 @@ Statistics maintained by the CCSA optimizer.
 @kwdef mutable struct CCSAStats{H}
     outer_iters_done::Int = 0
     inner_iters_done::Int = 0
+    dual_outer_iters_done::Int = 0
+    dual_inner_iters_done::Int = 0
     inner_iters_cur_done::Int = 0
     history::H = DataFrame()
 end
 function reset!(stats::CCSAStats)
     stats.outer_iters_done = 0
     stats.inner_iters_done = 0
+    stats.dual_outer_iters_done = 0
+    stats.dual_inner_iters_done = 0
     stats.inner_iters_cur_done = 0
     stats.history = DataFrame()
 end

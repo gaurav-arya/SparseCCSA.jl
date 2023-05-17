@@ -20,7 +20,8 @@ includet("FISTASolver.jl")
 using .FISTASolver
 begin
 uest, info = fista(G, y, α, β, 1000000, 1e-44, L1(p))
-norm(uest - u) / norm(u)
+fista_hist = info.history;
+@show norm(uest - u) / norm(u)
 end
 
 ## Solve problem with CCSA
@@ -29,12 +30,56 @@ includet("SparseCCSALassoData.jl")
 using .SparseCCSALassoData
 
 begin
-h, opt = sparseccsa_lasso_data(G, y, α, β; xtol_rel=1e-11, dual_ftol_rel=1e-10)
+h, opt = sparseccsa_lasso_data(G, y, α, β; xtol_rel=1e-9, dual_ftol_rel=1e-4)
 ih = h.inner_history[1]
 uestsp = h.x[end][1:p]
 @show norm(uestsp - uest) / norm(uest) # converges well even with noise + uest far from u (!)
-@show opt.stats.outer_iters_done
+@show opt.stats.inner_iters_done
+@show opt.stats.dual_inner_iters_done
 end
+
+## Convergence plot
+
+begin
+using CairoMakie
+fig = Figure(resolution=(900, 600))    
+ax1 = Axis(fig[1,1], yscale=log10, xlabel="Function evaluations", ylabel="Error", title="a)")
+ax2 = Axis(fig[1,2], xlabel="Outer Iterations", title="b)")
+
+sp_acc = Float64[]
+sp_iters = Int64[]
+for i in 1:10:size(h)[1]
+    push!(sp_iters, h.inner_iters_done[i])
+    u = h.x[i][1:p]
+    push!(sp_acc, norm(u - uest) / norm(uest))
+end
+
+fista_acc = Float64[]
+fista_iters = Int64[]
+
+for i in 1:10:length(fista_hist)
+    push!(fista_iters, i)
+    u = fista_hist[i]
+    push!(fista_acc, norm(u - uest) / norm(uest))
+end
+
+lines!(ax1, sp_iters, sp_acc, label="SparseCCSA", color=:blue)
+lines!(ax1, fista_iters, fista_acc, label="FISTA", color=:green)
+axislegend(ax1; position=:rb)
+
+
+lines!(ax2, h.inner_iters_done, label="Inner iterations done (n_I)")
+lines!(ax2, h.dual_inner_iters_done, label="Dual function evaluations made (n_D)")
+axislegend(ax2, position=:lt)
+
+save("plots/lasso_compare.png", fig; px_per_unit=5)
+fig
+end
+
+
+
+
+
 
 ## OK, time to try NLopt instead
 
