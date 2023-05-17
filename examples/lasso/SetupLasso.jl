@@ -3,7 +3,6 @@ __revise_mode__ = :eval
 
 using Random
 using Statistics
-using Symbolics
 using SparseArrays
 
 function setup_lasso(n, p, S, noise_level)
