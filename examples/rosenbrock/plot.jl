@@ -1,7 +1,7 @@
-include("SparseCCSAData.jl")
-include("NLoptData.jl")
-using .SparseCCSAData
-using .NLoptData
+includet("SparseCCSARosenbrockData.jl")
+includet("NLoptRosenbrockData.jl")
+using .SparseCCSARosenbrockData
+using .NLoptRosenbrockData
 using LinearAlgebra
 
 begin
