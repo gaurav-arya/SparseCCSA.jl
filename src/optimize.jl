@@ -177,6 +177,11 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
         
         stats.inner_iters_cur_done += 1
         stats.inner_iters_done += 1
+        
+        if dual_sol !== nothing
+            stats.dual_outer_iters_done += dual_sol.stats.outer_iters_done
+            stats.dual_inner_iters_done += dual_sol.stats.inner_iters_done
+        end
 
         # Break out if conservative
         inner_done && break
@@ -203,7 +208,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
     @. cache.ρ = max(cache.ρ / 10, 1e-3)
 
     if _unwrap_val(verbosity) > 0
-        push!(stats.history, (;ρ=copy(cache.ρ), σ=copy(cache.σ), x=copy(cache.x), fx=copy(cache.fx), inner_iters_done=stats.inner_iters_done, inner_history))
+        push!(stats.history, (;ρ=copy(cache.ρ), σ=copy(cache.σ), x=copy(cache.x), fx=copy(cache.fx), inner_iters_done=stats.inner_iters_done, dual_inner_iters_done=stats.dual_inner_iters_done, inner_history))
     end
 
     return retcode
