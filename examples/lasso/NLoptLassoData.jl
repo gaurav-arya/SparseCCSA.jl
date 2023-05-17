@@ -12,7 +12,7 @@ function run_once_nlopt(G, y, α, β)
     nlopt.lower_bounds = vcat(fill(-Inf, p), zeros(p)) 
     nlopt.upper_bounds = fill(Inf, 2p)
     # nlopt.maxeval = 2000
-    nlopt.xtol_rel = 1e-6
+    nlopt.xtol_rel = 1e-8
     # nlopt.ftol_rel = 0.0
     # nlopt.xtol_abs = 0.0
     # nlopt.ftol_abs = 0.0

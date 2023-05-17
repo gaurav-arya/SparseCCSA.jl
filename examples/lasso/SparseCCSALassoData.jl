@@ -13,6 +13,9 @@ function sparseccsa_lasso_data(G, y, α, β; settings...)
     t0 = 2 * abs.(u0) # start the t's with some slack
     u0_and_t0 = vcat(u0, t0)
 
+    # TODO: this check should be in the algorithm itself, and check both primal and dual
+    isempty(settings) && error("Need a stopping condition for both primal and dual")
+
     opt = init(f_and_jac, 2p, 2p, Float64, jac_prototype;
                 lb=vcat(fill(-Inf, p), zeros(p)), ub=Inf,
                 x0 = u0_and_t0, 
