@@ -16,9 +16,10 @@ end
 
 ## Solve problem with FISTA
 
+includet("FISTASolver.jl")
+using .FISTASolver
 begin
-using ImplicitAdjoints
-uest, info = genlasso(G, y, α, β, 1000000, 1e-44, L1(p))
+uest, info = (G, y, α, β, 1000000, 1e-44, L1(p))
 norm(uest - u) / norm(u)
 end
 

@@ -1,8 +1,19 @@
 # copied from https://github.com/gaurav-arya/ImplicitAdjoints.jl/
 module FISTASolver
+__revise_mode__ = :eval
 
 using LinearAlgebra
 using IterativeSolvers
+using LinearMaps
+
+# subtypes should implement:
+# transform_op(x, reg) -> LinearOperator
+# projection_op(supp, reg) -> LinearOperator
+# proximal!(x, thresh, reg) -> vector
+# lipschitz_scale(reg) -> value
+# support(x, reg) -> vector
+# TODO: document above properly
+abstract type Regularizer end
 
 # uses the Fast Iterative Soft-Thresholding Algorithm (FISTA) to
 # minimize f(x) + g(x) = ½(|Ax - y|² + β|x|²) + ½α|Ψx|₁
@@ -61,16 +72,7 @@ function fista(A, y, α, β, iters, tol, reg::Regularizer, xstart)
     x, (;iters=iters_done, final_tol=norm(x .- xold) / norm(x), xupdates) 
 end
 
-## regularizers
-
-# subtypes should implement:
-# transform_op(x, reg) -> LinearOperator
-# projection_op(supp, reg) -> LinearOperator
-# proximal!(x, thresh, reg) -> vector
-# lipschitz_scale(reg) -> value
-# support(x, reg) -> vector
-# TODO: document above properly
-abstract type Regularizer end
+## regularizer implementations
 
 support(x, thresh, reg::Regularizer) = abs.(transform_op(reg) * x) .> thresh
 proximal(x, thresh, reg::Regularizer) = proximal!(copy(x), thresh, reg) # fallback for out-of-place proximal
@@ -93,7 +95,7 @@ end
 
 # transform
 
-transform_op(reg::L1) = Identity(reg.size)
+transform_op(reg::L1) = LinearMap(x -> x, x -> x, reg.size, reg.size)
 
 # projection
 
@@ -119,8 +121,8 @@ end
 
 Base.:(*)(P::L1Project, x::AbstractVector) = x[P.suppinv .> 0]
 Base.:(*)(Pt::L1ProjectTranspose, y::AbstractVector) = [Pt.lmap.suppinv[i] > 0 ? y[Pt.lmap.suppinv[i]] : 0.0 for i in 1:Pt.lmap.p] # TODO: use zero element instead?
-mul!(uflat::AbstractVecOrMat, P::L1Project, yflat::AbstractVector) = (uflat[:] = P * yflat)
-mul!(uflat::AbstractVecOrMat, Pt::L1ProjectTranspose, yflat::AbstractVector) = (uflat[:] = Pt * yflat)
+LinearAlgebra.mul!(uflat::AbstractVecOrMat, P::L1Project, yflat::AbstractVector) = (uflat[:] = P * yflat)
+LinearAlgebra.mul!(uflat::AbstractVecOrMat, Pt::L1ProjectTranspose, yflat::AbstractVector) = (uflat[:] = Pt * yflat)
 
 projection_op(supp, reg::L1) = L1Project(reg.size, supp)
 
@@ -198,8 +200,8 @@ function Base.:(*)(Dt::GradientTranspose, xflat::AbstractVector)
     y[:]
 end
 
-mul!(uflat::AbstractVecOrMat, D::Gradient, yflat::AbstractVector) = (uflat[:] = D * yflat)
-mul!(uflat::AbstractVecOrMat, Dt::GradientTranspose, yflat::AbstractVector) = (uflat[:] = Dt * yflat)
+LinearAlgebra.mul!(uflat::AbstractVecOrMat, D::Gradient, yflat::AbstractVector) = (uflat[:] = D * yflat)
+LinearAlgebra.mul!(uflat::AbstractVecOrMat, Dt::GradientTranspose, yflat::AbstractVector) = (uflat[:] = Dt * yflat)
 
 function transform_op(reg::TV)
     ndims = length(reg.size)
@@ -286,7 +288,9 @@ function Base.:(*)(Pt::TVProjectTranspose, y::AbstractVector)
 end
 
 projection_op(supp, reg::TV) = TVProject(reg.size, supp, reg.wrap)
-mul!(uflat::AbstractVecOrMat, P::TVProject, yflat::AbstractVector) = (uflat[:] = P * yflat)
-mul!(uflat::AbstractVecOrMat, Pt::TVProjectTranspose, yflat::AbstractVector) = (uflat[:] = Pt * yflat)
+LinearAlgebra.mul!(uflat::AbstractVecOrMat, P::TVProject, yflat::AbstractVector) = (uflat[:] = P * yflat)
+LinearAlgebra.mul!(uflat::AbstractVecOrMat, Pt::TVProjectTranspose, yflat::AbstractVector) = (uflat[:] = Pt * yflat)
+
+export fista, L1, TV
 
 end

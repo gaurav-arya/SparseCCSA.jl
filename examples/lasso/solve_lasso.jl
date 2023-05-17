@@ -16,9 +16,10 @@ end
 
 ## Solve problem with FISTA
 
+includet("FISTASolver.jl")
+using .FISTASolver
 begin
-using ImplicitAdjoints
-uest, info = genlasso(G, y, α, β, 1000000, 1e-44, L1(p))
+uest, info = fista(G, y, α, β, 1000000, 1e-44, L1(p))
 norm(uest - u) / norm(u)
 end
 
@@ -31,7 +32,7 @@ begin
 h, opt = sparseccsa_lasso_data(G, y, α, β; xtol_rel=1e-11, dual_ftol_rel=1e-10)
 ih = h.inner_history[1]
 uestsp = h.x[end][1:p]
-@show norm(uestsp - uest) / norm(uest)
+@show norm(uestsp - uest) / norm(uest) # converges well even with noise + uest far from u (!)
 @show opt.stats.outer_iters_done
 end
 
