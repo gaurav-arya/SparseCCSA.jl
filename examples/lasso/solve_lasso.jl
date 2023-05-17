@@ -9,8 +9,8 @@ n = 8
 p = 8
 S = 2
 (;u, G, y) = setup_lasso(n, p, S)
-α = 0.0#1e-2
-β = 1e-5#0.0
+α = 1e-2
+β = 0.0
 end
 
 ## Solve problem with FISTA
@@ -21,22 +21,17 @@ uest, info = genlasso(G, y, α, β, 1000000, 1e-44, L1(p))
 norm(uest - u) / norm(u)
 end
 
-uest_qr = (G'G + β * I) \ G'y
-norm(uest - uest_qr) / norm(uest_qr)
-
 ## Solve problem with CCSA
 
 includet("SparseCCSALassoData.jl")
 using .SparseCCSALassoData
 
 begin
-h = sparseccsa_lasso_data(G, y, α, β)
+h, opt = sparseccsa_lasso_data(G, y, α, β; xtol_rel=1e-5, dual_ftol_rel=1e-10)
 ih = h.inner_history[1]
 uestsp = h.x[end][1:p]
 norm(uestsp - uest) / norm(uest)
 end
-uestsp
-uest
 
 h.inner_history[1].gx_proposed
 h.inner_history[1].fx_proposed

@@ -10,7 +10,7 @@ p = 8
 S = 2
 (;u, G, y) = setup_lasso(n, p, S)
 α = 0.0#1e-2
-β = 1e-5#0.0
+β = 1e-2#0.0
 end
 
 ## Solve problem with FISTA
@@ -37,15 +37,6 @@ ih = h.inner_history[1]
 uestsp = h.x[end][1:p]
 norm(uestsp - uest_qr) / norm(uest_qr)
 end
-
-opt.cache.x
-opt.cache.x_prev
-
-h.x[end] - h.x[end-1]
-h.inner_history[end].Δx_proposed[end] + h.x[end-1]
-h.x[end] ==h.x[end-1]
-
-h[(end-1):end, :]
 
 ## OK, time to try NLopt instead
 
