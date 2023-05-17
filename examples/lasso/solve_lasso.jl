@@ -31,7 +31,8 @@ begin
 h, opt = sparseccsa_lasso_data(G, y, α, β; xtol_rel=1e-11, dual_ftol_rel=1e-10)
 ih = h.inner_history[1]
 uestsp = h.x[end][1:p]
-norm(uestsp - uest) / norm(uest)
+@show norm(uestsp - uest) / norm(uest)
+@show opt.stats.outer_iters_done
 end
 
 ## OK, time to try NLopt instead
@@ -44,26 +45,15 @@ uestnl = sol[2][1:p]
 norm(uestnl - uest) / norm(uest)
 end
 
-# evaluate objective on QR soln
+# evaluate objective on solutions
 begin
 grad = zeros(2p)
-make_obj(G, y, α, β)(vcat(uest_qr, abs.(uest_qr)), grad)
-# make_obj(G, y, α, β)(vcat(uestnl, abs.(uestnl)), grad)
-# gradnl = zeros(2p)
-# NLoptLassoData.make_obj(G, y, α)(vcat(uestnl, abs.(uestnl)), gradnl)
+@show make_obj(G, y, α, β)(vcat(uestnl, abs.(uestnl)), grad)
+@show make_obj(G, y, α, β)(vcat(uestsp, abs.(uestsp)), grad)
+@show make_obj(G, y, α, β)(vcat(uest, abs.(uest)), grad)
 end
 
-uestsp
-uest
-
-begin
-grad = zeros(2p)
-NLoptLassoData.make_obj(G, y, α)(vcat(uest, abs.(uest)), grad)
-gradnl = zeros(2p)
-NLoptLassoData.make_obj(G, y, α)(vcat(uestnl, abs.(uestnl)), gradnl)
-end
-
-## Plotting
+## Plotting (WIP)
 
 begin
 using CairoMakie
