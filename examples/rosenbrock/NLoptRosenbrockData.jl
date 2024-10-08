@@ -24,16 +24,16 @@ function run_once_nlopt(evals)
     nlopt = Opt(:LD_CCSAQ, 2)
     nlopt.lower_bounds = [-1.0, -1.0]
     nlopt.upper_bounds = [2.0, 2.0]
-    nlopt.maxeval = evals 
+    nlopt.maxeval = evals
     nlopt.xtol_rel = 0.0
     nlopt.xtol_abs = 0.0
     nlopt.params["verbosity"] = 2
 
-    nlopt.min_objective = obj 
+    nlopt.min_objective = obj
     inequality_constraint!(nlopt, cons1)
 
-    (minf,minx,ret) = optimize(nlopt, [0.5, 0.5])
-    return minf,minx,ret
+    (minf, minx, ret) = optimize(nlopt, [0.5, 0.5])
+    return minf, minx, ret
 end
 
 ## NLOpt output processing
@@ -48,8 +48,10 @@ function safe_scanf(buffer, fmt, args...)
         seek(buffer, pos)
         # skip ignored lines
         ln = readline(buffer)
-        if (startswith(ln, "j=") || startswith(ln, "dx =")) || startswith(ln, "u =") || startswith(ln, "v =") || startswith(ln, "dfdx") || startswith(ln, "dfcdx") || startswith(ln, "y:")
-           return safe_scanf(buffer, fmt, args...)
+        if (startswith(ln, "j=") || startswith(ln, "dx =")) || startswith(ln, "u =") ||
+           startswith(ln, "v =") || startswith(ln, "dfdx") || startswith(ln, "dfcdx") ||
+           startswith(ln, "y:")
+            return safe_scanf(buffer, fmt, args...)
         end
         seek(buffer, pos)
         return nothing
@@ -62,7 +64,7 @@ end
     Requires use of custom nlopt binary: build from https://github.com/gaurav-arya/nlopt/tree/ag-debug,
     move shared object file to this directory, and set with set_binary.jl.
 """
-function nlopt_dataframe(evals) 
+function nlopt_dataframe(evals)
     open("nlopt_out.txt", "w") do io
         redirect_stdout(io) do
             run_once_nlopt(evals)
@@ -94,41 +96,45 @@ function nlopt_dataframe(evals)
 
     buffer = IOBuffer(read(open("nlopt_out.txt"), String)) # easier to copy
     d = DataFrame()
-    while true 
+    while true
         # read one inner iteration
         inner_history = DataFrame()
         inner_iter = 0
         done = false
         while true
-            if (out = safe_scanf(buffer, inner_iter_fmt, Int64, (Float64 for i in 1:5)...)) !== nothing
+            if (out = safe_scanf(buffer, inner_iter_fmt, Int64, (Float64 for i in 1:5)...)) !==
+               nothing
                 dual_iters, dual_obj, dual_opt, dual_grad, _x_proposed... = out
                 x_proposed = collect(_x_proposed)
             else
                 done = true
             end
-            if (out = safe_scanf(buffer, inner_iter2_fmt, (Float64 for i in 1:2)...)) !== nothing
+            if (out = safe_scanf(buffer, inner_iter2_fmt, (Float64 for i in 1:2)...)) !==
+               nothing
                 ρ = collect(out)
                 do_break = false
             else
                 ρ = [NaN, NaN]
                 do_break = true
             end
-            push!(inner_history, (;dual_iters, dual_obj, dual_opt, dual_grad, ρ, x_proposed))
+            push!(
+                inner_history, (; dual_iters, dual_obj, dual_opt, dual_grad, ρ, x_proposed))
             do_break && break
         end
         done && break
         safe_scanf(buffer, infeasible_point_fmt, String) # skip infeasible point log in hacky way
-        out = safe_scanf(buffer, outer_iter_fmt, (Float64 for i in 1:2)...) 
+        out = safe_scanf(buffer, outer_iter_fmt, (Float64 for i in 1:2)...)
         if out === nothing
             break
         end
         ρ = collect(out)
-        if (out = safe_scanf(buffer, outer_iter_sigma_fmt, (Float64 for i in 1:2)...)) !== nothing
+        if (out = safe_scanf(buffer, outer_iter_sigma_fmt, (Float64 for i in 1:2)...)) !==
+           nothing
             σ = collect(out)
         else
             σ = [NaN]
         end
-        push!(d, (;ρ, σ, inner_history, x=inner_history.x_proposed[end]))
+        push!(d, (; ρ, σ, inner_history, x = inner_history.x_proposed[end]))
     end
     if countlines(copy(buffer)) != 0
         @show countlines(copy(buffer))

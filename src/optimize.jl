@@ -1,25 +1,26 @@
-function reinit!(optimizer::CCSAOptimizer{T}; x0=nothing, lb=nothing, ub=nothing) where {T}
+function reinit!(
+        optimizer::CCSAOptimizer{T}; x0 = nothing, lb = nothing, ub = nothing) where {T}
     @unpack cache, dual_optimizer = optimizer
 
     # Reset optimizer stats 
     reset!(optimizer.stats)
     # Initialize lb and ub
-    (lb !== nothing) && (cache.lb .= lb) 
-    (ub !== nothing) && (cache.ub .= ub) 
+    (lb !== nothing) && (cache.lb .= lb)
+    (ub !== nothing) && (cache.ub .= ub)
     # Reinitialize ρ and σ
     cache.ρ .= one(T)
     map!(cache.σ, cache.lb, cache.ub) do lb, ub
         (isinf(lb) || isinf(ub)) ? 1.0 : (ub - lb) / 2.0
     end
     # Reinitialize starting point (default: keep what we are already at)
-    (x0 !== nothing) && (cache.x .= x0) 
-    cache.x_prev .= cache.x 
-    cache.x_prevprev .= cache.x 
+    (x0 !== nothing) && (cache.x .= x0)
+    cache.x_prev .= cache.x
+    cache.x_prevprev .= cache.x
     # Reinitialize function evaluation and Jacobian
     optimizer.f_and_jac(cache.fx, cache.jac_fx, cache.x)
     # Recursively reinitalize dual optimizer
     if dual_optimizer !== nothing
-        reinit!(dual_optimizer; x0=zero(T), lb=zero(T), ub=typemax(T))
+        reinit!(dual_optimizer; x0 = zero(T), lb = zero(T), ub = typemax(T))
     end
 end
 
@@ -27,7 +28,7 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
     if optimizer.dual_optimizer !== nothing
         dual_optimizer = optimizer.dual_optimizer
         reinit!(dual_optimizer)
-        dual_sol = solve!(dual_optimizer; verbosity=Val(_unwrap_val(verbosity)-1))
+        dual_sol = solve!(dual_optimizer; verbosity = Val(_unwrap_val(verbosity) - 1))
 
         # We can form the dual evaluator with DualEvaluator(; cache = optimizer.cache),
         # but since we have already formed it for the dual optimizer we just retrieve it here.  
@@ -40,11 +41,11 @@ function propose_Δx!(Δx, optimizer::CCSAOptimizer{T}; verbosity) where {T}
         Δx .= optimizer.cache.Δx
 
         # Return dual solution object (used for logging)
-        return dual_sol 
+        return dual_sol
     else
         # the "dual dual" problem has 0 variables and 0 contraints, but running it allows us to retrieve the proposed Δx [length m].
         dual_dual_evaluator = DualEvaluator(; cache = optimizer.cache)
-        dual_dual_evaluator(nothing, nothing, nothing) 
+        dual_dual_evaluator(nothing, nothing, nothing)
 
         Δx .= optimizer.cache.Δx
         return nothing
@@ -56,10 +57,12 @@ Return a CCSAOptimizer that can be step!'d.
 Free to allocate here.
 """
 # TODO: defaults for kwargs below
-function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=nothing, 
-              max_iters=nothing, max_inner_iters=nothing, max_dual_iters=nothing, max_dual_inner_iters=nothing,
-              ftol_abs=nothing, ftol_rel=nothing, dual_ftol_abs=nothing, dual_ftol_rel=nothing,
-              xtol_abs=nothing, xtol_rel=nothing, dual_xtol_abs=nothing, dual_xtol_rel=nothing)
+function init(
+        f_and_jac, n, m, T, jac_prototype, p; lb = nothing, ub = nothing, x0 = nothing,
+        max_iters = nothing, max_inner_iters = nothing, max_dual_iters = nothing,
+        max_dual_inner_iters = nothing,
+        ftol_abs = nothing, ftol_rel = nothing, dual_ftol_abs = nothing, dual_ftol_rel = nothing,
+        xtol_abs = nothing, xtol_rel = nothing, dual_xtol_abs = nothing, dual_xtol_rel = nothing)
 
     # Allocate primal cache, with n variables and m constraints
     cache = allocate_cache(; n, m, T, jac_prototype)
@@ -68,15 +71,16 @@ function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=noth
     dual_cache = allocate_cache_for_dual(; m, T)
 
     # Setup optimizers
-    dual_optimizer = CCSAOptimizer(; f_and_jac = DualEvaluator(; cache), cache = dual_cache,
-                                   dual_optimizer = nothing,
-                                   settings = CCSASettings(; max_iters = max_dual_iters, 
-                                                           max_inner_iters = max_dual_inner_iters,
-                                                           ftol_abs = dual_ftol_abs, ftol_rel = dual_ftol_rel,
-                                                           xtol_abs = dual_xtol_abs, xtol_rel = dual_xtol_rel))
+    dual_optimizer = CCSAOptimizer(;
+        f_and_jac = DualEvaluator(; cache), cache = dual_cache,
+        dual_optimizer = nothing,
+        settings = CCSASettings(; max_iters = max_dual_iters,
+            max_inner_iters = max_dual_inner_iters,
+            ftol_abs = dual_ftol_abs, ftol_rel = dual_ftol_rel,
+            xtol_abs = dual_xtol_abs, xtol_rel = dual_xtol_rel))
     optimizer = CCSAOptimizer(; f_and_jac, cache, dual_optimizer,
-                                settings = CCSASettings(; max_iters, max_inner_iters, 
-                                                        ftol_abs, ftol_rel, xtol_abs, xtol_rel))
+        settings = CCSASettings(; max_iters, max_inner_iters,
+            ftol_abs, ftol_rel, xtol_abs, xtol_rel))
 
     # Initialize optimizer
     _x0 = zeros(T, n)
@@ -85,7 +89,7 @@ function init(f_and_jac, n, m, T, jac_prototype; lb=nothing, ub=nothing, x0=noth
     (_x0 !== nothing) && (_x0 .= x0)
     (lb !== nothing) && (_lb .= lb)
     (ub !== nothing) && (_ub .= ub)
-    reinit!(optimizer; x0=_x0, lb=_lb, ub=_ub)
+    reinit!(optimizer; x0 = _x0, lb = _lb, ub = _ub)
 
     return optimizer
 end
@@ -102,7 +106,7 @@ What are the invariants / contracts?
 - optimizer.cache.{fx,jac_fx} come from applying optimizer.f_and_jac at optimizer.cache.x
 - optimizer.dual_optimizer contains a ref to optimizer.cache, so updating latter implicitly updates the former. 
 """
-function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
+function step!(optimizer::CCSAOptimizer{T}; verbosity = Val(0)) where {T}
     @unpack f_and_jac, cache, stats, settings = optimizer
 
     retcode = get_retcode(optimizer)
@@ -119,11 +123,11 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
     # Solve the dual problem, searching for a conservative solution. 
     stats.inner_iters_cur_done = 0
     inner_history = _unwrap_val(verbosity) > 0 ? DataFrame() : nothing
-    while true 
+    while true
         dual_sol = propose_Δx!(cache.Δx_proposed, optimizer; verbosity)
 
         # Compute conservative approximation g at proposed point.
-        w = sum(Iterators.map(abs2 ∘ /, cache.Δx_proposed, cache.σ); init=zero(T)) / 2
+        w = sum(Iterators.map(abs2 ∘ /, cache.Δx_proposed, cache.σ); init = zero(T)) / 2
         cache.gx_proposed .= cache.fx .+ cache.ρ .* w
         mul!(cache.gx_proposed, cache.jac_fx, cache.Δx_proposed, true, true)
 
@@ -132,31 +136,33 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
         f_and_jac(cache.fx_proposed, cache.jac_fx_proposed, cache.x_proposed)
 
         # Increase ρ for non-conservative convex approximations.
-        conservative = true 
+        conservative = true
         for i in eachindex(cache.ρ)
             approx_error = cache.gx_proposed[i] - cache.fx_proposed[i]
             conservative_i = (approx_error >= -1e-10)
             conservative &= conservative_i
-            if !conservative_i 
+            if !conservative_i
                 cache.ρ[i] = min(10.0 * cache.ρ[i], 1.1 * (cache.ρ[i] - approx_error / w))
             end
         end
 
         if _unwrap_val(verbosity) > 0
             dual_info = if dual_sol !== nothing
-                (;dual_iters=dual_sol.stats.outer_iters_done, dual_obj=-dual_sol.fx[1], 
-                  dual_opt=dual_sol.x[1], 
-                  dual_history=dual_sol.stats.history)
+                (; dual_iters = dual_sol.stats.outer_iters_done,
+                    dual_obj = -dual_sol.fx[1],
+                    dual_opt = dual_sol.x[1],
+                    dual_history = dual_sol.stats.history)
             else
                 nothing
             end
-            push!(inner_history, (;ρ=copy(cache.ρ), 
-                                   x_proposed=copy(cache.x_proposed),
-                                   Δx_proposed=copy(cache.Δx_proposed),
-                                   conservative=cache.gx_proposed .>= (cache.fx_proposed .- 1e-10),
-                                   fx_proposed=copy(cache.fx_proposed),
-                                   gx_proposed=copy(cache.gx_proposed),
-                                   dual_info))
+            push!(inner_history,
+                (; ρ = copy(cache.ρ),
+                    x_proposed = copy(cache.x_proposed),
+                    Δx_proposed = copy(cache.Δx_proposed),
+                    conservative = cache.gx_proposed .>= (cache.fx_proposed .- 1e-10),
+                    fx_proposed = copy(cache.fx_proposed),
+                    gx_proposed = copy(cache.gx_proposed),
+                    dual_info))
         end
 
         # We are guaranteed to have a better optimum once we find a conservative approximation.
@@ -165,7 +171,8 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
         # so long as we are still feasible. (Done mostly for consistency with nlopt.) 
         feasible = all(<=(0), @view cache.fx_proposed[2:end])
         better_opt = cache.fx_proposed[1] < cache.fx[1]
-        inner_done = conservative || (stats.inner_iters_cur_done == settings.max_inner_iters) 
+        inner_done = conservative ||
+                     (stats.inner_iters_cur_done == settings.max_inner_iters)
         # Make sure to always update if inner_done, even if (inner_done && !feasible) somehow holds due to
         # floating point shenanigans.
         if (feasible && better_opt) || inner_done
@@ -174,7 +181,7 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
             cache.fx .= cache.fx_proposed
             cache.jac_fx .= cache.jac_fx_proposed
         end
-        
+
         stats.inner_iters_cur_done += 1
         stats.inner_iters_done += 1
 
@@ -203,7 +210,10 @@ function step!(optimizer::CCSAOptimizer{T}; verbosity=Val(0)) where {T}
     @. cache.ρ = max(cache.ρ / 10, 1e-3)
 
     if _unwrap_val(verbosity) > 0
-        push!(stats.history, (;ρ=copy(cache.ρ), σ=copy(cache.σ), x=copy(cache.x), fx=copy(cache.fx), inner_iters_done=stats.inner_iters_done, inner_history))
+        push!(stats.history,
+            (; ρ = copy(cache.ρ), σ = copy(cache.σ),
+                x = copy(cache.x), fx = copy(cache.fx),
+                inner_iters_done = stats.inner_iters_done, inner_history))
     end
 
     return retcode
@@ -218,10 +228,10 @@ function get_retcode(optimizer::CCSAOptimizer)
 
     if (stats.outer_iters_done > 1)
         # Objective tolerance 
-        Δfx = abs(cache.fx[1] - cache.fx_prev[1])  
+        Δfx = abs(cache.fx[1] - cache.fx_prev[1])
         if (settings.ftol_abs !== nothing) && (Δfx < settings.ftol_abs)
             return :FTOL_ABS
-        elseif (settings.ftol_rel !== nothing) && 
+        elseif (settings.ftol_rel !== nothing) &&
                (abs(Δfx) / min(abs(cache.fx[1]), abs(cache.fx_prev[1])) < settings.ftol_rel)
             return :FTOL_REL
         end
@@ -229,8 +239,8 @@ function get_retcode(optimizer::CCSAOptimizer)
         Δx_norm = norm(Iterators.map(-, cache.x, cache.x_prev))
         if (settings.xtol_abs !== nothing) && (Δx_norm < settings.xtol_abs)
             return :XTOL_ABS
-        elseif (settings.xtol_rel !== nothing) && 
-               (Δx_norm / min(norm(cache.x), norm(cache.x_prev)) < settings.xtol_rel) 
+        elseif (settings.xtol_rel !== nothing) &&
+               (Δx_norm / min(norm(cache.x), norm(cache.x_prev)) < settings.xtol_rel)
             return :XTOL_REL
         end
     end
@@ -238,10 +248,91 @@ function get_retcode(optimizer::CCSAOptimizer)
     return :CONTINUE
 end
 
-function solve!(optimizer::CCSAOptimizer; verbosity=Val(0))
+function solve!(optimizer::CCSAOptimizer; verbosity = Val(0))
     retcode = :CONTINUE
     while retcode == :CONTINUE
         retcode = step!(optimizer; verbosity)
     end
-    return (; x=optimizer.cache.x, fx=optimizer.cache.fx, retcode, stats=optimizer.stats)
+    return (;
+        x = optimizer.cache.x, fx = optimizer.cache.fx, retcode, stats = optimizer.stats)
+end
+
+struct CCSA end
+
+SciMLBase.supports_opt_cache_interface(::CCSA) = true
+SciMLBase.requiresgradient(::CCSA) = true
+SciMLBase.allowsfg(::CCSA) = true
+SciMLBase.allowsconstraints(::CCSA) = true
+SciMLBase.requiresconsjac(::CCSA) = true
+SciMLBase.allowsbounds(::CCSA) = true
+
+function Optimization.__map_optimizer_args(
+        cache::Optimization.OptimizationCache, opt::CCSA;
+        callback = nothing,
+        maxiters::Union{Number, Nothing} = nothing,
+        maxtime::Union{Number, Nothing} = nothing,
+        abstol::Union{Number, Nothing} = nothing,
+        reltol::Union{Number, Nothing} = nothing,
+        verbose::Bool = false,
+        kwargs...)
+    mapped_args = (; kwargs...)
+    if !isnothing(abstol)
+        mapped_args = (; mapped_args..., xtol_abs = abstol)
+    end
+    if !isnothing(maxtime)
+        @warn "common maxtime is currently not used by $(opt)"
+    end
+
+    if !isnothing(maxiters)
+        mapped_args = (; mapped_args..., max_iters = maxiters, max_dual_iters = maxiters)
+    end
+
+    if !isnothing(reltol)
+        mapped_args = (; mapped_args..., xtol_rel = reltol)
+    end
+
+    return mapped_args
+end
+
+function SciMLBase.__solve(
+        cache::OptimizationCache{
+        F,
+        RC,
+        LB,
+        UB,
+        LC,
+        UC,
+        S,
+        O,
+        D,
+        P
+}) where {
+        F,
+        RC,
+        LB,
+        UB, LC, UC,
+        S,
+        O <: CCSA,
+        D,
+        P
+}
+    function f_and_jac(fx_proposed, jac_fx_proposed, x_proposed, p = cache.p)
+        fx_proposed[1] = cache.f.fg(@view(jac_fx_proposed[1, :]), x_proposed, p)
+        cache.f.cons(@view(fx_proposed[2:end]), x_proposed)
+        cache.f.cons_j(@view(jac_fx_proposed[2:end, :]), x_proposed)
+    end
+
+    solver_kwargs = Optimization.__map_optimizer_args(
+        cache, cache.opt; cache.solver_args...)
+
+    if cache.f.cons_jac_prototype !== nothing
+        opt = init(f_and_jac, length(cache.u0), length(cache.lcons), eltype(cache.u0),
+            vcat(zeros((1, length(cache.u0))), cache.f.cons_jac_prototype),
+            cache.p; lb = cache.lb, ub = cache.ub, x0 = cache.u0, solver_kwargs...)
+    end
+
+    sol = solve!(opt; verbosity = Val(2))
+    opt_ret = Optimization.deduce_retcode(sol.retcode)
+    return SciMLBase.build_solution(
+        cache, opt, sol.x, sol.fx, retcode = opt_ret, original = sol)
 end

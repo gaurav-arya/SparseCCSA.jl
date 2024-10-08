@@ -4,6 +4,7 @@ using LinearAlgebra
 using UnPack
 using Printf
 using DataFrames # TODO: lighter weight alternative?
+using Optimization, Optimization.SciMLBase
 
 import Base.@kwdef
 

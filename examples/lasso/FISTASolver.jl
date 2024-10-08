@@ -18,47 +18,48 @@ abstract type Regularizer end
 # uses the Fast Iterative Soft-Thresholding Algorithm (FISTA) to
 # minimize f(x) + g(x) = ½(|Ax - y|² + β|x|²) + ½α|Ψx|₁
 
-fista(A, y, α, β, iters, tol, reg::Regularizer) = fista(A, y, α, β, iters, tol, reg::Regularizer, zeros(size(A)[2]))
+function fista(A, y, α, β, iters, tol, reg::Regularizer)
+    fista(A, y, α, β, iters, tol, reg::Regularizer, zeros(size(A)[2]))
+end
 
 function fista(A, y, α, β, iters, tol, reg::Regularizer, xstart)
     n, p = size(A)
-    
-    maxeig = abs(powm(A' * A, maxiter=100)[1]) # TODO: handle number of eigiters
+
+    maxeig = abs(powm(A' * A, maxiter = 100)[1]) # TODO: handle number of eigiters
     L = maxeig + β # Lipschitz constant of f (strongly convex term)
     η = 1 / (L * lipschitz_scale(reg))
 
     x = xstart[:]
-    z = x[:] 
+    z = x[:]
     xold = similar(x)
-    res = similar(y) 
+    res = similar(y)
     grad = similar(x)
     t = 1
-    
+
     iters_done = iters
-    xupdates = Float64[] 
+    xupdates = Float64[]
     convdists = Float64[]
     evals = Float64[]
 
     Ψ = transform_op(reg)
     Fold = Inf
 
-    for i = 1:iters
-
+    for i in 1:iters
         xold .= x
 
         res .= mul!(res, A, z) .- y # TODO: maybe use five-arg mul! instead. (but IterativeSolvers sticks to three-arg)
-        grad .= mul!(grad, A', res) .+ β .* z 
+        grad .= mul!(grad, A', res) .+ β .* z
 
         x .= z .- η .* grad
-        proximal!(x, 1/2 * η * α, reg)
+        proximal!(x, 1 / 2 * η * α, reg)
 
         restart = dot(z .- x, x .- xold)
         restart > 0 && (t = 1)
 
         told = t
-        t = 1/2 * (1 + √(1 + 4t^2))
-        
-        z .= x .+ (told - 1)/t .* (x .- xold)
+        t = 1 / 2 * (1 + √(1 + 4t^2))
+
+        z .= x .+ (told - 1) / t .* (x .- xold)
 
         xupdate = norm(z .- xold) / norm(xold)
         append!(xupdates, xupdate)
@@ -69,7 +70,7 @@ function fista(A, y, α, β, iters, tol, reg::Regularizer, xstart)
         end
     end
 
-    x, (;iters=iters_done, final_tol=norm(x .- xold) / norm(x), xupdates) 
+    x, (; iters = iters_done, final_tol = norm(x .- xold) / norm(x), xupdates)
 end
 
 ## regularizer implementations
@@ -78,12 +79,12 @@ support(x, thresh, reg::Regularizer) = abs.(transform_op(reg) * x) .> thresh
 proximal(x, thresh, reg::Regularizer) = proximal!(copy(x), thresh, reg) # fallback for out-of-place proximal
 
 ## L1 regularizer
-struct L1 <: Regularizer 
+struct L1 <: Regularizer
     size::Int
 end
 
 support(x, reg::L1) = support(x, 1e-3, reg)
-lipschitz_scale(::L1) = 2.
+lipschitz_scale(::L1) = 2.0
 
 # proximal
 
@@ -120,9 +121,16 @@ function L1Project(p::Int, supp::AbstractVector{Bool})
 end
 
 Base.:(*)(P::L1Project, x::AbstractVector) = x[P.suppinv .> 0]
-Base.:(*)(Pt::L1ProjectTranspose, y::AbstractVector) = [Pt.lmap.suppinv[i] > 0 ? y[Pt.lmap.suppinv[i]] : 0.0 for i in 1:Pt.lmap.p] # TODO: use zero element instead?
-LinearAlgebra.mul!(uflat::AbstractVecOrMat, P::L1Project, yflat::AbstractVector) = (uflat[:] = P * yflat)
-LinearAlgebra.mul!(uflat::AbstractVecOrMat, Pt::L1ProjectTranspose, yflat::AbstractVector) = (uflat[:] = Pt * yflat)
+function Base.:(*)(Pt::L1ProjectTranspose, y::AbstractVector)
+    [Pt.lmap.suppinv[i] > 0 ? y[Pt.lmap.suppinv[i]] : 0.0 for i in 1:(Pt.lmap.p)]
+end # TODO: use zero element instead?
+function LinearAlgebra.mul!(uflat::AbstractVecOrMat, P::L1Project, yflat::AbstractVector)
+    (uflat[:] = P * yflat)
+end
+function LinearAlgebra.mul!(
+        uflat::AbstractVecOrMat, Pt::L1ProjectTranspose, yflat::AbstractVector)
+    (uflat[:] = Pt * yflat)
+end
 
 projection_op(supp, reg::L1) = L1Project(reg.size, supp)
 
@@ -134,7 +142,7 @@ struct TVProximalWork
     diff::AbstractArray{Float64}
 end
 
-struct TV <: Regularizer 
+struct TV <: Regularizer
     size::Tuple
     wrap::Bool
     work::TVProximalWork
@@ -162,7 +170,7 @@ function proximal!(x, thresh, reg::TV)
         xroll = roll(x, -1, i)
         diff .= (d -> min(2 * D * thresh, abs(d) / 2) * sign(d)).(xroll .- x)
         Δ .+= diff ./ (2 * D)
-        Δ .-= roll(diff, 1, i) ./  (2 * D)
+        Δ .-= roll(diff, 1, i) ./ (2 * D)
     end
     x .+= Δ
     reshape(x, prod(reg.size))
@@ -170,13 +178,15 @@ end
 
 function proximal2(x, thresh, reg::TV)
     y = x[:]
-    proxTV!(y, thresh, shape=reg.size, iterations=20)
+    proxTV!(y, thresh, shape = reg.size, iterations = 20)
     y
 end
 
 # transform
 
-roll(x, shift, dim) = ShiftedArrays.circshift(x, (zeros(dim-1)..., shift, zeros(ndims(x)-dim)...))
+function roll(x, shift, dim)
+    ShiftedArrays.circshift(x, (zeros(dim - 1)..., shift, zeros(ndims(x) - dim)...))
+end
 
 struct Gradient <: LinearMap{Float64}
     size::Tuple
@@ -200,8 +210,13 @@ function Base.:(*)(Dt::GradientTranspose, xflat::AbstractVector)
     y[:]
 end
 
-LinearAlgebra.mul!(uflat::AbstractVecOrMat, D::Gradient, yflat::AbstractVector) = (uflat[:] = D * yflat)
-LinearAlgebra.mul!(uflat::AbstractVecOrMat, Dt::GradientTranspose, yflat::AbstractVector) = (uflat[:] = Dt * yflat)
+function LinearAlgebra.mul!(uflat::AbstractVecOrMat, D::Gradient, yflat::AbstractVector)
+    (uflat[:] = D * yflat)
+end
+function LinearAlgebra.mul!(
+        uflat::AbstractVecOrMat, Dt::GradientTranspose, yflat::AbstractVector)
+    (uflat[:] = Dt * yflat)
+end
 
 function transform_op(reg::TV)
     ndims = length(reg.size)
@@ -233,15 +248,16 @@ function TVProject(size::Tuple, supp::AbstractVector{<:Bool}, wrap::Bool)
     for start_pt in CartesianIndices(size)
         explored[start_pt] && continue
         region = [start_pt]
-        explored[start_pt] = true;
-        s = Stack{CartesianIndex{ndims}}();
+        explored[start_pt] = true
+        s = Stack{CartesianIndex{ndims}}()
         push!(s, start_pt)
         while !isempty(s)
             pt = pop!(s)
             pttup = Tuple(pt)
             for i in 1:ndims
                 if wrap || pt[i] < size[i]
-                    pt_right = CartesianIndex(pttup[1:i-1]..., 1 + mod(pt[i], size[i]), pttup[i+1:ndims]...)
+                    pt_right = CartesianIndex(pttup[1:(i - 1)]..., 1 + mod(pt[i], size[i]),
+                        pttup[(i + 1):ndims]...)
                     if !supp[pt, i] && !explored[pt_right]
                         explored[pt_right] = true
                         push!(s, pt_right)
@@ -249,7 +265,9 @@ function TVProject(size::Tuple, supp::AbstractVector{<:Bool}, wrap::Bool)
                     end
                 end
                 if wrap || pt[i] > 1
-                    pt_left = CartesianIndex(pttup[1:i-1]..., 1 + mod(pt[i]-2, size[i]), pttup[i+1:ndims]...)
+                    pt_left = CartesianIndex(
+                        pttup[1:(i - 1)]..., 1 + mod(pt[i] - 2, size[i]),
+                        pttup[(i + 1):ndims]...)
                     if !supp[pt_left, i] && !explored[pt_left]
                         explored[pt_left] = true
                         push!(s, pt_left)
@@ -271,14 +289,14 @@ end
 
 function region_vals(P::TVProject, x::AbstractVector)
     x = reshape(x, P.size)
-    function region_vals(region) 
+    function region_vals(region)
         vals = [x[pt] for pt in region]
         sum(vals) / length(region), maximum(vals) - minimum(vals), length(vals)
     end
     map(region_vals, P.regions)
 end
 
-function Base.:(*)(Pt::TVProjectTranspose, y::AbstractVector) 
+function Base.:(*)(Pt::TVProjectTranspose, y::AbstractVector)
     P = Pt.lmap
     x = zeros(P.size)
     for (val, region) in zip(y, P.regions)
@@ -288,8 +306,13 @@ function Base.:(*)(Pt::TVProjectTranspose, y::AbstractVector)
 end
 
 projection_op(supp, reg::TV) = TVProject(reg.size, supp, reg.wrap)
-LinearAlgebra.mul!(uflat::AbstractVecOrMat, P::TVProject, yflat::AbstractVector) = (uflat[:] = P * yflat)
-LinearAlgebra.mul!(uflat::AbstractVecOrMat, Pt::TVProjectTranspose, yflat::AbstractVector) = (uflat[:] = Pt * yflat)
+function LinearAlgebra.mul!(uflat::AbstractVecOrMat, P::TVProject, yflat::AbstractVector)
+    (uflat[:] = P * yflat)
+end
+function LinearAlgebra.mul!(
+        uflat::AbstractVecOrMat, Pt::TVProjectTranspose, yflat::AbstractVector)
+    (uflat[:] = Pt * yflat)
+end
 
 export fista, L1, TV
 

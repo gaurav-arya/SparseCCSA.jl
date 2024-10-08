@@ -11,6 +11,3 @@ set_preferences!(
 using NLopt_jll
 
 NLopt_jll.get_libnlopt_path()
-
-
-

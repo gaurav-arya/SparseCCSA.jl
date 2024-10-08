@@ -33,13 +33,13 @@ end
 
 function allocate_cache(; n, m, T, jac_prototype)
     return CCSACache(; x = zeros(T, n), fx = zeros(T, m + 1), jac_fx = copy(jac_prototype),
-                   ρ = zeros(T, m + 1),
-                   σ = zeros(T, n), lb = zeros(T, n), ub = zeros(T, n),
-                   Δx_proposed = zeros(T, n), x_proposed = zeros(T, n), gx_proposed = zeros(T, m + 1),
-                   fx_proposed = zeros(T, m + 1), jac_fx_proposed = copy(jac_prototype),
-                   x_prev = zeros(T, n), x_prevprev = zeros(T, n), fx_prev = zeros(T, m + 1),
-                   a = zeros(T, n), b = zeros(T, n), Δx = zeros(T, n), 
-                   λ_all = zeros(T, m + 1), grad_gλ_all = zeros(T, m + 1))
+        ρ = zeros(T, m + 1),
+        σ = zeros(T, n), lb = zeros(T, n), ub = zeros(T, n),
+        Δx_proposed = zeros(T, n), x_proposed = zeros(T, n), gx_proposed = zeros(T, m + 1),
+        fx_proposed = zeros(T, m + 1), jac_fx_proposed = copy(jac_prototype),
+        x_prev = zeros(T, n), x_prevprev = zeros(T, n), fx_prev = zeros(T, m + 1),
+        a = zeros(T, n), b = zeros(T, n), Δx = zeros(T, n),
+        λ_all = zeros(T, m + 1), grad_gλ_all = zeros(T, m + 1))
 end
 
 """
@@ -47,7 +47,7 @@ Instantiates the cache structure for a dual problem with m constraints.
 """
 function allocate_cache_for_dual(; m, T)
     return allocate_cache(; n = m, m = 0, T,
-                        jac_prototype = zeros(T, 1, m))
+        jac_prototype = zeros(T, 1, m))
 end
 
 """

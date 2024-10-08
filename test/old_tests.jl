@@ -26,7 +26,7 @@
         @test opt₂.ub == fill(typemax(T), nvar)
         @test opt₂.xtol_rel == T(1e-5)
         opt₃ = CCSAState(nvar, ncon, f_and_jac, x₀, ρ = ρ, σ = σ, lb = lower_bound,
-                         ub = upper_bound)
+            ub = upper_bound)
         @test opt₃.lb == lower_bound
         @test opt₃.ub == upper_bound
         @test opt₃.xtol_rel == T(1e-5)
@@ -124,7 +124,7 @@ end
         x = [-10.0, -10.0]
         xtol_rel = 1e-6
         st = CCSAState(n, m, f_and_grad, x, ρ = ρ, σ = σ, lb = lb, ub = ub,
-                       xtol_rel = xtol_rel)
+            xtol_rel = xtol_rel)
         optimize(st)
         return st.x
     end

@@ -29,7 +29,8 @@ using ForwardDiff
     Δx_solution([0.0, 0.0])
 
     # Form dual evaluator 
-    cache = SparseCCSA.allocate_cache(; n = 2, m = 2, T = Float64, jac_prototype = [2 1; 1 0; 0 1])
+    cache = SparseCCSA.allocate_cache(;
+        n = 2, m = 2, T = Float64, jac_prototype = [2 1; 1 0; 0 1])
     cache.x .= 1.0
     cache.ρ .= 1.0
     cache.σ .= 1.0

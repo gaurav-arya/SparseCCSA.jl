@@ -16,7 +16,7 @@ function setup_lasso(n, p, S, noise_level)
     y = G * u
     y += noise_level * mean(abs.(y)) * η
 
-    return (;u, G, y)
+    return (; u, G, y)
 end
 
 """
@@ -24,7 +24,7 @@ Return the f_and_jac function for Lasso's epigraph formulation.
 """
 function lasso_epigraph(G, y, α, β)
     n, p = size(G)
-    ∇cons = spzeros(2p, 2p) 
+    ∇cons = spzeros(2p, 2p)
     for i in 1:p
         ∇cons[i, i] = 1
         ∇cons[i, p + i] = -1
@@ -42,11 +42,11 @@ function lasso_epigraph(G, y, α, β)
         end
         return nothing
     end
-    return (;f_and_jac, jac_prototype = vcat(ones(2 * p)', ∇cons))
+    return (; f_and_jac, jac_prototype = vcat(ones(2 * p)', ∇cons))
 end
 
 # for NLopt
-function make_obj(G, y, α, β) 
+function make_obj(G, y, α, β)
     n, p = size(G)
     return (u_and_t, grad) -> begin
         u = @view u_and_t[1:p]
@@ -58,7 +58,7 @@ function make_obj(G, y, α, β)
     end
 end
 
-_unwrap_val(::Val{x}) where x = x
+_unwrap_val(::Val{x}) where {x} = x
 function make_cons(p, iv)
     i = _unwrap_val(iv)
     return (u_and_t, grad) -> begin
@@ -66,7 +66,7 @@ function make_cons(p, iv)
         t = @view u_and_t[(p + 1):(2p)]
         if length(grad) > 0
             grad .= 0
-            if i <= p 
+            if i <= p
                 grad[i] = 1
                 grad[i + p] = -1
             else

@@ -16,8 +16,8 @@ end
 function f_and_jac(fx, jac, x)
     fx .= f(x)
     if jac !== nothing
-        jac .= @SMatrix [100 * 2 * (x[2] - x[1]^2) * (-2x[1]) - 2 * (1 - x[1]) * 1 100 * 2 * (x[2] - x[1]^2);
-                 2 * x[1] 2 * x[2]]
+        jac .= @SMatrix [100 * 2 * (x[2] - x[1]^2) * (-2x[1])-2 * (1 - x[1]) * 1 100*2*(x[2]-x[1]^2);
+                         2*x[1] 2*x[2]]
         # cfg = ForwardDiff.JacobianConfig(f, jac, x, ForwardDiff.Chunk{2}())
         # ForwardDiff.jacobian!(jac, f, x, cfg)
     end
